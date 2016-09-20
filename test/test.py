@@ -52,7 +52,7 @@ def main():
     
     # Create map
 
-    headers = {'Accept': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
+    headers = {'Content-Type': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
     r = requests.post(maps_url, headers=headers, json=map)
     if r.status_code == 201:
         print 'correctly created map %s' % r.headers['Location']
@@ -60,6 +60,38 @@ def main():
         map_etag = r.headers['Etag'] 
     else:
         print 'failed to create map %s %s %s' % (maps_url, r.status_code, r.text)
+        return
+        
+    headers = {'Accept': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
+    r = requests.get(map_url, headers=headers, json=map)
+    if r.status_code == 200:
+        map_url2 = urljoin(BASE_URL, r.headers['Content-Location'])
+        if map_url == map_url2:
+            map = r.json()
+            print 'correctly retrieved map: %s' % map_url 
+        else:
+            print 'retrieved map at %s but Content-Location is wrong: %s' % (map_url, map_url2)
+            return
+    else:
+        print 'failed to retrieve map %s %s %s' % (map_url, r.status_code, r.text)
+        return
+        
+    entry = {
+        'isA': 'MapEntry',
+        'key': 'HumptyDumpty',
+        'test-data': True
+        }
+
+    entries_url = urljoin(BASE_URL, map['entries']) 
+    
+    headers = {'Content-Type': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
+    r = requests.post(entries_url, headers=headers, json=entry)
+    if r.status_code == 201:
+        print 'correctly created entry %s' % r.headers['Location']
+        entry_url = urljoin(BASE_URL, r.headers['Location'])
+        entry_etag = r.headers['Etag'] 
+    else:
+        print 'failed to create entry %s %s %s' % (entries_url, r.status_code, r.text)
         return
         
 if __name__ == '__main__':

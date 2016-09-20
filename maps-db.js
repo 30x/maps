@@ -23,6 +23,19 @@ function createMapThen(id, map, callback) {
   });
 }
 
+function createEntryThen(mapid, key, map, callback) {
+  var query = `INSERT INTO entries (mapid, key, data) values('${mapid}', '${key}', '${JSON.stringify(map)}') RETURNING etag`;
+  pool.query(query, function (err, pg_res) {
+    if (err) {
+      callback(err);
+    }
+    else {
+      var row = pg_res.rows[0];
+      callback(null, row.etag);
+    }
+  });
+}
+
 function withMapDo(id, callback) {
   pool.query('SELECT etag, data FROM maps WHERE id = $1', [id], function (err, pg_res) {
     if (err) {
@@ -106,4 +119,5 @@ exports.createMapThen = createMapThen;
 exports.updateMapThen = updateMapThen;
 exports.deleteMapThen = deleteMapThen;
 exports.withMapDo = withMapDo;
+exports.createEntryThen = createEntryThen;
 exports.init = init;
