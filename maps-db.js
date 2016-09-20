@@ -80,19 +80,21 @@ function updateMapThen(req, res, id, map, patchedMap, etag, callback) {
   });
 }
 
-function createDB(table, callback) {
-  var query = `CREATE TABLE IF NOT EXISTS ${table} (id text primary key, etag serial, data jsonb);`
+function executeQuery(query, callback) {
   pool.query(query, function(err, pgResult) {
     if(err) 
-      console.error(`error creating ${table} table`, err);
+      console.error(`error executing query ${query}`, err);
     callback();
   });
 }
 
 function init(callback) {
-  createDB('maps', function() {
-    createDB('entries', function() {
-      createDB('values', function() {
+  var query = 'CREATE TABLE IF NOT EXISTS map (id text primary key, etag serial, data jsonb);'
+  executeQuery(query, function() {
+    var query = 'CREATE TABLE IF NOT EXISTS entries (mapid text, key text, etag serial, data jsonb, PRIMARY KEY (mapid, key));'
+    executeQuery(query, function() {
+      var query = 'CREATE TABLE IF NOT EXISTS values (mapid text, key text, metadata jsonb, value bytea, PRIMARY KEY (mapid, key));'
+      executeQuery(query, function() {
         console.log(`connected to PG at ${config.host}`);
         callback();
       });
