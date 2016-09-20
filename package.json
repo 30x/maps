@@ -1,0 +1,25 @@
+{
+  "name": "maps",
+  "version": "0.0.1",
+  "description": "",
+  "main": "maps.js",
+  "dependencies": {
+    "http-helper-functions": "^0.0.14",
+    "node-uuid": "^1.4.7",
+    "pg": "^6.0.3"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/30x/maps.git"
+  },
+  "author": "Martin Nally",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/30x/maps/issues"
+  },
+  "homepage": "https://github.com/30x/maps#readme"
+}
