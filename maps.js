@@ -3,7 +3,7 @@ var http = require('http');
 var url = require('url');
 var lib = require('http-helper-functions');
 var uuid = require('node-uuid');
-var db = require('./maps-db.js');
+var ps = require('./maps-persistence.js');
 
 var MAPS = '/bWFw-';
 
@@ -35,7 +35,7 @@ function createMap(req, res, map) {
         // Create permissions first. If we fail after creating the permissions resource but before creating the main resource, 
         // there will be a useless but harmless permissions document.
         // If we do things the other way around, a map without matching permissions could cause problems.
-        db.createMapThen(req, res, id, selfURL, map, function(etag) {
+        ps.createMapThen(req, res, id, selfURL, map, function(etag) {
           map._self = selfURL; 
           lib.created(req, res, map, map._self, etag);
         });
@@ -50,7 +50,7 @@ function makeSelfURL(req, key) {
 
 function getMap(req, res, id) {
   lib.ifAllowedThen(req, res, '_resource', 'read', function() {
-    db.withMapDo(req, res, id, function(map , etag) {
+    ps.withMapDo(req, res, id, function(map , etag) {
       map._self = makeSelfURL(req, id);
       map._permissions = `protocol://authority/permissions?${map._self}`;
       map._permissionsHeirs = `protocol://authority/permissions-heirs?${map._self}`;
@@ -62,7 +62,7 @@ function getMap(req, res, id) {
 
 function deleteMap(req, res, id) {
   lib.ifAllowedThen(req, res, 'delete', function() {
-    db.deleteMapThen(req, res, id, function (map, etag) {
+    ps.deleteMapThen(req, res, id, function (map, etag) {
       lib.found(req, res, map, map.etag);
     });
   });
@@ -71,7 +71,7 @@ function deleteMap(req, res, id) {
 function updateMap(req, res, id, patch) {
   lib.ifAllowedThen(req, res, 'update', function(map, etag) {
     var patchedMap = lib.mergePatch(map, patch);
-    db.updateMapThen(req, res, id, map, patchedMap, etag, function (etag) {
+    ps.updateMapThen(req, res, id, map, patchedMap, etag, function (etag) {
       patchedPermissions._self = selfURL(id, req); 
       lib.found(req, res, map, etag);
     });
@@ -105,7 +105,7 @@ function requestHandler(req, res) {
     }
   }
 }
-db.init(function(){
+ps.init(function(){
   var port = process.env.PORT;
   http.createServer(requestHandler).listen(port, function() {
     console.log(`server is listening on ${port}`);

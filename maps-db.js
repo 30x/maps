@@ -1,6 +1,5 @@
 'use strict';
 var Pool = require('pg').Pool;
-var lib = require('http-helper-functions');
 
 var config = {
   host: process.env.PG_HOST,
@@ -11,28 +10,27 @@ var config = {
 
 var pool = new Pool(config);
 
-function createMapThen(req, res, id, selfURL, map, callback) {
-  lib.internalizeURLs(map, req.headers.host);
+function createMapThen(id, map, callback) {
   var query = `INSERT INTO maps (id, data) values('${id}', '${JSON.stringify(map)}') RETURNING etag`;
   pool.query(query, function (err, pg_res) {
     if (err) {
-      lib.internalError(res, err);
+      callback(err);
     }
     else {
       var row = pg_res.rows[0];
-      callback(row.etag);
+      callback(null, row.etag);
     }
   });
 }
 
-function withMapDo(req, res, id, callback) {
+function withMapDo(id, callback) {
   pool.query('SELECT etag, data FROM maps WHERE id = $1', [id], function (err, pg_res) {
     if (err) {
-      lib.internalError(res, err);
+      callback(err);
     }
     else {
       if (pg_res.rowCount === 0) { 
-        lib.notFound(req, res);
+        callback(404);
       }
       else {
         var row = pg_res.rows[0];
@@ -42,15 +40,15 @@ function withMapDo(req, res, id, callback) {
   });
 }
 
-function deleteMapThen(req, res, id, callback) {
+function deleteMapThen(id, callback) {
   var query = `DELETE FROM maps WHERE id = '${id}' RETURNING *`;
   pool.query(query, function (err, pg_res) {
     if (err) {
-      lib.internalError(res, err);
+      callback(err);
     }
     else {
       if (pg_res.rowCount === 0) { 
-        lib.notFound(req, res);
+        callback(404);
       }
       else {
         var row = pg_res.rows[0];
@@ -60,17 +58,15 @@ function deleteMapThen(req, res, id, callback) {
   });
 }
 
-function updateMapThen(req, res, id, map, patchedMap, etag, callback) {
-  lib.internalizeURLs(patchedMap, req.headers.host);
-  var key = lib.internalizeURL(id, req.headers.host);
-  var query = `UPDATE maps SET data = ('${JSON.stringify(patchedMap)}') WHERE subject = '${key}' AND etag = ${etag} RETURNING etag`;
+function updateMapThen(id, patchedMap, etag, callback) {
+  var query = `UPDATE maps SET data = ('${JSON.stringify(patchedMap)}') WHERE subject = '${id}' AND etag = ${etag} RETURNING etag`;
   pool.query(query, function (err, pg_res) {
     if (err) {
-      lib.internalError(res, err);
+      callback(err);
     }
     else {
       if (pg_res.rowCount === 0) { 
-        lib.notFound(req, res);
+        callback(404);
       }
       else {
         var row = pg_res.rows[0];
@@ -95,7 +91,7 @@ function init(callback) {
     executeQuery(query, function() {
       var query = 'CREATE TABLE IF NOT EXISTS values (mapid text, key text, metadata jsonb, value bytea, PRIMARY KEY (mapid, key));'
       executeQuery(query, function() {
-        console.log(`connected to PG at ${config.host}`);
+        console.log('maps-db: connected to PG, config: ', config);
         callback();
       });
     });
