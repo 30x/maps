@@ -34,7 +34,7 @@ function withMapDo(id, callback) {
       }
       else {
         var row = pg_res.rows[0];
-        callback(row.data, row.etag);
+        callback(null, row.data, row.etag);
       }
     }
   });
@@ -52,7 +52,7 @@ function deleteMapThen(id, callback) {
       }
       else {
         var row = pg_res.rows[0];
-        callback(row.data, row.etag);
+        callback(null, row.data, row.etag);
       }
     }
   });
@@ -70,7 +70,7 @@ function updateMapThen(id, patchedMap, etag, callback) {
       }
       else {
         var row = pg_res.rows[0];
-        callback(row.data, row.etag);
+        callback(null, row.data, row.etag);
       }
     }
   });
