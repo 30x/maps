@@ -76,7 +76,7 @@ function makeValueURL(req, mapID, key) {
 
 function addCalculatedEntryProperties(req, entry, mapID, key) {
   entry._self = makeEntryURL(req, mapID, key)
-  entry.valueRef = makeValueURL(req, mapID, key)
+  entry.value = makeValueURL(req, mapID, key)
 }
 
 function createEntry(req, res, mapID, entry) {
@@ -215,7 +215,10 @@ function requestHandler(req, res) {
           getEntries(req, res, mapID)
         else
           lib.methodNotAllowed(req, res, ['GET', 'POST'])
-      }
+      } else if (splitPath.length == 4 && splitPath[2].lastIndexOf('entries',0) > -1 && splitPath[3] == 'value')  /* url of form /MAPS-xxxxxx/entries;{key}/value */
+        lib.internalError(res, 'not yet implemented')
+      else
+        lib.notFound(req, res)
     } else if (req_url.pathname.lastIndexOf(VALUES, 0) > -1) {
       let splitPath = req_url.pathname.split('/')
       if (splitPath.length == 2)
@@ -231,7 +234,7 @@ function requestHandler(req, res) {
         lib.notFound(req, res)      
     } else if (req_url.pathname.lastIndexOf('/maps;', 0) > -1) {
       let splitPath = req_url.pathname.split('/')
-      if (splitPath.length == 2) {
+      if (splitPath.length == 2)
         if (req.method == 'GET') {
           let id = req_url.pathname.substring('/maps;'.length);
           getNameParts(req, res, req_url.pathname.substring(VALUES.length), function(ns, name) {
@@ -239,7 +242,12 @@ function requestHandler(req, res) {
           })
         } else 
           lib.methodNotAllowed(req, res, ['GET'])
-      }      
+      else if (splitPath.length == 3 && splitPath[2] == 'entries')  /* url of form /maps;ns:name/entries */
+        lib.internalError(res, 'not yet implemented')
+      else if (splitPath.length == 4 && splitPath[2].lastIndexOf('entries',0) > -1 && splitPath[3] == 'value')  /* url of form /maps;ns:name/entries;{key}/value */
+        lib.internalError(res, 'not yet implemented')
+      else
+        lib.notFound(req, res)
     } else 
       lib.notFound(req, res)
   }

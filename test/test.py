@@ -88,8 +88,8 @@ def main():
     r = requests.post(entries_url, headers=headers, json=entry)
     if r.status_code == 201:
         entry_url = urljoin(BASE_URL, r.headers['Location'])
-        value_ref  = urljoin(BASE_URL, r.json()['valueRef'])
-        print 'correctly created entry: %s valueRef: %s' % (entries_url, value_ref)
+        value_ref  = urljoin(BASE_URL, r.json()['value'])
+        print 'correctly created entry: %s value: %s' % (entries_url, value_ref)
     else:
         print 'failed to create entry %s %s %s' % (entries_url, r.status_code, r.text)
         return
@@ -112,8 +112,8 @@ def main():
     r = requests.post(entries_url, headers=headers, json=entry)
     if r.status_code == 201:
         entry_url2 = urljoin(BASE_URL, r.headers['Location'])
-        value_ref2  = urljoin(BASE_URL, r.json()['valueRef'])
-        print 'correctly created entry: %s valueRef: %s' % (entries_url, value_ref)
+        value_ref2  = urljoin(BASE_URL, r.json()['value'])
+        print 'correctly created entry: %s value: %s' % (entries_url, value_ref)
     else:
         print 'failed to create entry %s %s %s' % (entries_url, r.status_code, r.text)
         return
