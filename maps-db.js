@@ -47,7 +47,7 @@ function upsertValueThen(mapid, key, metadata, value, callback) {
 }
 
 function withMapDo(id, callback) {
-  pool.query(`SELECT etag, data FROM maps WHERE id = '${id}'`, function (err, pg_res) {
+  pool.query(`SELECT data FROM maps WHERE id = '${id}'`, function (err, pg_res) {
     if (err) {
       callback(err);
     }
@@ -58,6 +58,24 @@ function withMapDo(id, callback) {
       else {
         var row = pg_res.rows[0];
         callback(null, row.data);
+      }
+    }
+  });
+}
+
+function withValueDo(mapID, key, callback) {
+  var query = `SELECT metadata, value FROM values WHERE mapid = '${mapID}' AND key = '${key}'`
+  pool.query(query, function (err, pg_res) {
+    if (err) {
+      callback(err);
+    }
+    else {
+      if (pg_res.rowCount === 0) { 
+        callback(404);
+      }
+      else {
+        var row = pg_res.rows[0];
+        callback(null, row.metadata, row.value);
       }
     }
   });
@@ -160,4 +178,5 @@ exports.createEntryThen = createEntryThen
 exports.upsertValueThen = upsertValueThen
 exports.withEntriesDo = withEntriesDo
 exports.withMapByNameDo = withMapByNameDo
+exports.withValueDo = withValueDo
 exports.init = init

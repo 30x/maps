@@ -118,13 +118,23 @@ def main():
         print 'failed to create entry %s %s %s' % (entries_url, r.status_code, r.text)
         return
 
-    r = requests.put(value_ref2, headers=headers, data='first entry value')
+    headers = {'Content-Type': 'text/plain','Authorization': 'Bearer %s' % TOKEN1}
+    r = requests.put(value_ref2, headers=headers, data='Little Miss Muffet\nSat on a tuffet')
     if r.status_code == 201 or r.status_code == 200:
         loc = r.headers['Location' if r.status_code == 201 else 'Content-Location']
         print 'correctly created value: %s ' % (loc)
         value_url = urljoin(BASE_URL, loc)
     else:
         print 'failed to create value %s %s %s' % (value_ref2, r.status_code, r.text)
+        return
+
+    headers = {'Authorization': 'Bearer %s' % TOKEN1}
+    r = requests.get(value_ref2, headers=headers)
+    if r.status_code == 200:
+        loc = r.headers['Content-Location']
+        print 'correctly got value at %s : %s ' % (loc, r.text)
+    else:
+        print 'failed to get value %s %s %s' % (value_ref2, r.status_code, r.text)
         return
 
     headers = {'Accept': 'application/json','Authorization': 'Bearer %s' % TOKEN1}

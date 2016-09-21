@@ -102,13 +102,13 @@ function createEntry(req, res, mapID, entry) {
 
 function createValue(req, res, mapID, key, value) {
   var user = lib.getUser(req);
-  if (user == null) {
-    lib.unauthorized(req, res);
-  } else {
+  if (user == null)
+    lib.unauthorized(req, res)
+  else {
     if (req.headers['content-type'] != null) {
       lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'create', function() {
         ps.upsertValueThen(req, res, mapID, key, value, function() {
-          lib.created(req, res, null, makeValueURL(req, mapID, key));
+          lib.created(req, res, null, makeValueURL(req, mapID, key))
         })
       })
     } else
@@ -116,12 +116,26 @@ function createValue(req, res, mapID, key, value) {
   }  
 }
 
+function getValue(req, res, mapID, key) {
+  var user = lib.getUser(req);
+  if (user == null)
+    lib.unauthorized(req, res);
+  else
+    lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'read', function() {
+      ps.withValueDo(req, res, mapID, key, function(metadata, value) {
+        if (metadata['Content-Type'] == 'text/plain')
+          value = value.toString()
+        lib.found(req, res, value, null, makeValueURL(req, mapID, key), metadata['Content-Type'])
+      })
+    })
+}
+
 function returnMap(req, res, map, id) {
-      addCalculatedMapProperties(req, map, makeMapURL(req, id))
-      map._permissions = `protocol://authority/permissions?${map._self}`
-      map._permissionsHeirs = `protocol://authority/permissions-heirs?${map._self}`
-      lib.externalizeURLs(map, req.headers.host)
-      lib.found(req, res, map)
+  addCalculatedMapProperties(req, map, makeMapURL(req, id))
+  map._permissions = `protocol://authority/permissions?${map._self}`
+  map._permissionsHeirs = `protocol://authority/permissions-heirs?${map._self}`
+  lib.externalizeURLs(map, req.headers.host)
+  lib.found(req, res, map)
 }
 
 function getMap(req, res, id) {
@@ -193,7 +207,7 @@ function requestHandler(req, res) {
     var req_url = url.parse(req.url);
     if (req_url.pathname.lastIndexOf(MAPS, 0) > -1) { /* url of form /MAPS-xxxxxx */
       let splitPath = req_url.pathname.split('/')
-      if (splitPath.length == 2) {
+      if (splitPath.length == 2) { // first entry is always '' because pathname always begins with '/'
         let id = req_url.pathname.substring(MAPS.length);
         if (req.method == 'GET') 
           getMap(req, res, id);
@@ -215,9 +229,11 @@ function requestHandler(req, res) {
           getEntries(req, res, mapID)
         else
           lib.methodNotAllowed(req, res, ['GET', 'POST'])
-      } else if (splitPath.length == 4 && splitPath[2].lastIndexOf('entries',0) > -1 && splitPath[3] == 'value')  /* url of form /MAPS-xxxxxx/entries;{key}/value */
-        lib.internalError(res, 'not yet implemented')
-      else
+      } else if (splitPath.length == 4 && splitPath[2].lastIndexOf('entries;',0) > -1 && splitPath[3] == 'value') { /* url of form /MAPS-xxxxxx/entries;{key}/value */
+        var mapID = splitPath[1].substring(MAPS.length-1)
+        let key = splitPath[2].substring('entries;'.length);          
+        getValue(req, res, mapID, key)
+      } else
         lib.notFound(req, res)
     } else if (req_url.pathname.lastIndexOf(VALUES, 0) > -1) {
       let splitPath = req_url.pathname.split('/')
@@ -228,8 +244,12 @@ function requestHandler(req, res) {
               createValue(req, res, mapID, key, value)
             })
           })
+        else if (req.method == 'GET')
+          getNameParts(req, res, req_url.pathname.substring(VALUES.length), function(mapID, key) {
+            getValue(req, res, mapID, key)
+          })          
         else 
-          lib.methodNotAllowed(req, res, ['PUT'])
+          lib.methodNotAllowed(req, res, ['GET', 'PUT'])
       else  
         lib.notFound(req, res)      
     } else if (req_url.pathname.lastIndexOf('/maps;', 0) > -1) {
