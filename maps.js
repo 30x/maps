@@ -137,13 +137,15 @@ function deleteMap(req, res, id) {
 }
 
 function updateMap(req, res, id, patch) {
-  lib.ifAllowedThen(req, res, null, '_resource', 'update', function(map) {
-    var patchedMap = lib.mergePatch(map, patch);
-    ps.updateMapThen(req, res, id, map, patchedMap, function () {
-      patchedPermissions._self = selfURL(id, req); 
-      lib.found(req, res, map);
-    });
-  });
+  lib.ifAllowedThen(req, res, makeMapURL(req, id), '_resource', 'update', function(map) {
+    ps.withMapDo(req, res, id, function(map) {
+      var patchedMap = lib.mergePatch(map, patch);
+      ps.updateMapThen(req, res, id, map, patchedMap, function () {
+        addCalculatedMapProperties(req, patchedMap, makeMapURL(req, id)) 
+        lib.found(req, res, patchedMap);
+      })
+    })
+  })
 }
 
 function getEntries(req, res, mapID) {
@@ -177,7 +179,7 @@ function requestHandler(req, res) {
         } else if (req.method == 'DELETE') { 
           deleteMap(req, res, id);
         } else if (req.method == 'PATCH') { 
-          lib.getPostBody(req, res, function (req, res, jso) {
+          lib.getServerPostObject(req, res, function (req, res, jso) {
             updateMap(req, res, id, jso)
           });
         } else 

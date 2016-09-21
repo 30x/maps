@@ -130,12 +130,25 @@ def main():
     headers = {'Accept': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
     r = requests.get(map_entries, headers=headers, json=map)
     if r.status_code == 200:
-        print json.dumps(r.json(), indent=4)
         print 'correctly retrieved map entries: %s' % map_url 
     else:
         print 'failed to retrieve map entries %s %s %s' % (map_url, r.status_code, r.text)
         return
 
+    patch = {
+        'name': 'nursery-rhymes',
+        'namespace': 'acme'
+    }
         
+    headers = {'Content-Type': 'application/merge-patch+json','Authorization': 'Bearer %s' % TOKEN1}
+    r = requests.patch(map_url, headers=headers, json=patch)
+    if r.status_code == 200:
+        print json.dumps(r.json(), indent=4)
+        print 'correctly patched map: %s' % (map_url)
+    else:
+        print 'failed to patch map %s %s %s' % (map_url, r.status_code, r.text)
+        return
+
+
 if __name__ == '__main__':
     main()

@@ -93,7 +93,7 @@ function deleteMapThen(id, callback) {
 }
 
 function updateMapThen(id, patchedMap, callback) {
-  var query = `UPDATE maps SET data = ('${JSON.stringify(patchedMap)}') WHERE subject = '${id}'`;
+  var query = `UPDATE maps SET data = ('${JSON.stringify(patchedMap)}') WHERE id = '${id}'`;
   pool.query(query, function (err, pg_res) {
     if (err) {
       callback(err);
@@ -103,7 +103,7 @@ function updateMapThen(id, patchedMap, callback) {
         callback(404);
       }
       else {
-        callback(null, row.data);
+        callback(null);
       }
     }
   });
