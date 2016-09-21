@@ -15,7 +15,7 @@ function deleteTestDataThen(table, callback) {
   var query = `DELETE FROM ${table} WHERE data @> '{"test-data": true}'`;
   pool.query(query, function (err, pg_res) {
     if (err) 
-      console.log(`failed to delete test data from ${table}`)
+      console.log(`failed to delete test data from ${table} err: ${err}`)
     else
       console.log(`successfully deleted test data from ${table}`)      
     callback()
@@ -24,8 +24,6 @@ function deleteTestDataThen(table, callback) {
 
 deleteTestDataThen('maps', function(){
   deleteTestDataThen('entries', function() {
-    deleteTestDataThen('values', function() {
-      pool.end()
-    })
+    pool.end()
   })
 })

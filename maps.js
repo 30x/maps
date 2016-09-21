@@ -5,8 +5,9 @@ var lib = require('http-helper-functions')
 var uuid = require('node-uuid')
 var ps = require('./maps-persistence.js')
 
-var MAPS = '/bWFw-'
+var MAPS    = '/bWFw-'
 var ENTRIES = '/ZW50-'
+var VALUES  = '/dmFs-'
 
 function verifyMap(req, map, user) {
   var rslt = lib.setStandardCreationProperties(req, map, user)
@@ -15,8 +16,8 @@ function verifyMap(req, map, user) {
   return null
 }
 
-function makeMapURL(req, key) {
-  return '//' + req.headers.host + MAPS + key;
+function makeMapURL(req, mapID) {
+  return `//${req.headers.host}${MAPS}${mapID}`
 }
 
 function addCalculatedMapProperties(req, map, selfURL) {
@@ -69,31 +70,54 @@ function makeEntryURL(req, mapID, key) {
   return `//${req.headers.host}${ENTRIES}${mapID}:${key}`
 }
 
-function createEntry(req, res, mapSegment, entry) {
-  var user = lib.getUser(req);
-  if (user == null) {
-    lib.unauthorized(req, res);
-  } else { 
+function makeValueURL(req, mapID, key) {
+  return `//${req.headers.host}${VALUES}${mapID}:${key}`
+}
+
+function addCalculatedEntryProperties(req, entry, mapID, key) {
+  entry._self = makeEntryURL(req, mapID, key)
+  entry.valueRef = makeValueURL(req, mapID, key)
+}
+
+function createEntry(req, res, mapID, entry) {
+  var key = entry.key
+  var user = lib.getUser(req)
+  if (user == null)
+    lib.unauthorized(req, res)
+  else { 
     var err = verifyEntry(req, entry, user)
     if (err !== null)
       lib.badRequest(res, err)
     else {
       lib.internalizeURLs(entry, req.headers.host)
-      lib.withAllowedDo(req, res, `//${req.headers.host}/${mapSegment}`, '_resource', 'create', function(answer) {
-        if (answer) {
-          var mapID = mapSegment.substring(MAPS.length)
-          ps.createEntryThen(req, res, mapID, entry.key, entry, function(etag) {
-            entry._self = makeEntryURL(req, mapID, entry.key); 
-            lib.created(req, res, entry, entry._self, etag);
-          })
-        }
+      lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'create', function() {
+        ps.createEntryThen(req, res, mapID, key, entry, function(etag) {
+          addCalculatedEntryProperties(req, entry, mapID, key)
+          lib.created(req, res, entry, entry._self, etag)
+        })
       })
     } 
   }  
 }
 
+function createValue(req, res, mapID, key, value) {
+  var user = lib.getUser(req);
+  if (user == null) {
+    lib.unauthorized(req, res);
+  } else {
+    if (req.headers['content-type'] != null) {
+      lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'create', function() {
+        ps.upsertValueThen(req, res, mapID, key, value, function(etag) {
+          lib.created(req, res, null, makeValueURL(req, mapID, key), etag);
+        })
+      })
+    } else
+      lib.badRequest(res, 'must provide Content-Type header')
+  }  
+}
+
 function getMap(req, res, id) {
-  lib.ifAllowedThen(req, res, '_resource', 'read', function() {
+  lib.ifAllowedThen(req, res, null, '_resource', 'read', function() {
     ps.withMapDo(req, res, id, function(map , etag) {
       addCalculatedMapProperties(req, map, makeMapURL(req, id))
       map._permissions = `protocol://authority/permissions?${map._self}`;
@@ -105,7 +129,7 @@ function getMap(req, res, id) {
 }
 
 function deleteMap(req, res, id) {
-  lib.ifAllowedThen(req, res, 'delete', function() {
+  lib.ifAllowedThen(req, res, null, 'delete', function() {
     ps.deleteMapThen(req, res, id, function (map, etag) {
       lib.found(req, res, map, map.etag);
     });
@@ -113,7 +137,7 @@ function deleteMap(req, res, id) {
 }
 
 function updateMap(req, res, id, patch) {
-  lib.ifAllowedThen(req, res, 'update', function(map, etag) {
+  lib.ifAllowedThen(req, res, null, 'update', function(map, etag) {
     var patchedMap = lib.mergePatch(map, patch);
     ps.updateMapThen(req, res, id, map, patchedMap, etag, function (etag) {
       patchedPermissions._self = selfURL(id, req); 
@@ -125,15 +149,15 @@ function updateMap(req, res, id, patch) {
 function requestHandler(req, res) {
   if (req.url == '/maps') 
     if (req.method == 'POST')
-      lib.getServerPostBody(req, res, createMap)
+      lib.getServerPostObject(req, res, createMap)
     else
       lib.methodNotAllowed(req, res, ['POST'])
   else {
     var req_url = url.parse(req.url);
     if (req_url.pathname.lastIndexOf(MAPS, 0) > -1) {
-      var splitPath = req_url.pathname.split('/')
+      let splitPath = req_url.pathname.split('/')
       if (splitPath.length == 2) {
-        var id = req_url.pathname.substring(MAPS.length);
+        let id = req_url.pathname.substring(MAPS.length);
         if (req.method == 'GET') {
           getMap(req, res, id);
         } else if (req.method == 'DELETE') { 
@@ -146,12 +170,29 @@ function requestHandler(req, res) {
           lib.methodNotAllowed(req, res, ['GET', 'DELETE', 'PATCH']);
       } else if (splitPath.length == 3 && splitPath[2] == 'entries') { /* url of form /MAPS-xxxxxx/entries */
         if (req.method == 'POST') {
-          lib.getServerPostBody(req, res, function(req, res, entry) {
-            createEntry(req, res, splitPath[1], entry)
+          lib.getServerPostObject(req, res, function(req, res, entry) {
+            createEntry(req, res, splitPath[1].substring(MAPS.length-1), entry)
           })
         } else 
           lib.methodNotAllowed(req, res, ['GET', 'DELETE', 'PATCH'])
       }
+    } else if (req_url.pathname.lastIndexOf(VALUES, 0) > -1) {
+      let splitPath = req_url.pathname.split('/')
+      if (splitPath.length == 2) {
+        if (req.method == 'PUT') {
+          let id = req_url.pathname.substring(VALUES.length);
+          let splitID = id.split(':')
+          if (splitID.length == 2) {
+            let [mapID, key] = splitID
+            lib.getServerPostText(req, res, function(req, res, value) {
+              createValue(req, res, mapID, key, value)
+            })
+          } else
+            lib.badRequest(res, `invalid value id: ${id}`)
+        } else 
+          lib.methodNotAllowed(req, res, ['PUT'])
+      } else  
+        lib.notFound(req, res)      
     } else 
       lib.notFound(req, res)
   }

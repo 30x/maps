@@ -36,6 +36,19 @@ function createEntryThen(mapid, key, map, callback) {
   });
 }
 
+function upsertValueThen(mapid, key, metadata, value, callback) {
+  var query = `INSERT INTO values (mapid, key, metadata, value) values('${mapid}', '${key}', '${JSON.stringify(metadata)}', '${value}') ON CONFLICT (mapid, key) DO UPDATE SET (metadata, value) = (EXCLUDED.metadata, EXCLUDED.value) RETURNING etag`;
+  pool.query(query, function (err, pg_res) {
+    if (err) {
+      callback(err);
+    }
+    else {
+      var row = pg_res.rows[0];
+      callback(null, row.etag);
+    }
+  });
+}
+
 function withMapDo(id, callback) {
   pool.query('SELECT etag, data FROM maps WHERE id = $1', [id], function (err, pg_res) {
     if (err) {
@@ -102,7 +115,7 @@ function init(callback) {
   executeQuery(query, function() {
     var query = 'CREATE TABLE IF NOT EXISTS entries (mapid text, key text, etag serial, data jsonb, PRIMARY KEY (mapid, key));'
     executeQuery(query, function() {
-      var query = 'CREATE TABLE IF NOT EXISTS values (mapid text, key text, metadata jsonb, value bytea, PRIMARY KEY (mapid, key));'
+      var query = 'CREATE TABLE IF NOT EXISTS values (mapid text, key text, etag serial, metadata jsonb, value bytea, PRIMARY KEY (mapid, key));'
       executeQuery(query, function() {
         console.log('maps-db: connected to PG, config: ', config);
         callback();
@@ -115,9 +128,10 @@ process.on('unhandledRejection', function(e) {
   console.log(e.message, e.stack)
 })
 
-exports.createMapThen = createMapThen;
-exports.updateMapThen = updateMapThen;
-exports.deleteMapThen = deleteMapThen;
-exports.withMapDo = withMapDo;
-exports.createEntryThen = createEntryThen;
-exports.init = init;
+exports.createMapThen = createMapThen
+exports.updateMapThen = updateMapThen
+exports.deleteMapThen = deleteMapThen
+exports.withMapDo = withMapDo
+exports.createEntryThen = createEntryThen
+exports.upsertValueThen = upsertValueThen
+exports.init = init
