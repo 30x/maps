@@ -47,7 +47,7 @@ function upsertValueThen(mapid, key, metadata, value, callback) {
 }
 
 function withMapDo(id, callback) {
-  pool.query('SELECT etag, data FROM maps WHERE id = $1', [id], function (err, pg_res) {
+  pool.query(`SELECT etag, data FROM maps WHERE id = '${id}'`, function (err, pg_res) {
     if (err) {
       callback(err);
     }
@@ -59,6 +59,17 @@ function withMapDo(id, callback) {
         var row = pg_res.rows[0];
         callback(null, row.data);
       }
+    }
+  });
+}
+
+function withEntriesDo(mapid, callback) {
+  pool.query(`SELECT * FROM entries WHERE mapid = '${mapid}'`, function (err, pg_res) {
+    if (err) {
+      callback(err);
+    }
+    else {
+      callback(null, pg_res.rows);
     }
   });
 }
@@ -130,4 +141,5 @@ exports.deleteMapThen = deleteMapThen
 exports.withMapDo = withMapDo
 exports.createEntryThen = createEntryThen
 exports.upsertValueThen = upsertValueThen
+exports.withEntriesDo = withEntriesDo
 exports.init = init

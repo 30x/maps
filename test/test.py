@@ -57,6 +57,7 @@ def main():
     if r.status_code == 201:
         print 'correctly created map %s' % r.headers['Location']
         map_url = urljoin(BASE_URL, r.headers['Location'])
+        map_entries = urljoin(BASE_URL, r.json()['entries'])
     else:
         print 'failed to create map %s %s %s' % (maps_url, r.status_code, r.text)
         return
@@ -93,15 +94,48 @@ def main():
         print 'failed to create entry %s %s %s' % (entries_url, r.status_code, r.text)
         return
 
-    headers = {'Content-Type': 'text/plain','Authorization': 'Bearer %s' % TOKEN1}
     r = requests.put(value_ref, headers=headers, data='first entry value')
     if r.status_code == 201 or r.status_code == 200:
-        print 'correctly created value: %s ' % (r.headers['Location'])
+        loc = r.headers['Location' if r.status_code == 201 else 'Content-Location']
+        print 'correctly created value: %s ' % (loc)
         value_url = urljoin(BASE_URL, r.headers['Location'])
     else:
-        print 'failed to create valiue %s %s %s' % (value_ref, r.status_code, r.text)
+        print 'failed to create value %s %s %s' % (value_ref, r.status_code, r.text)
         return
         
+    entry = {
+        'isA': 'MapEntry',
+        'key': 'LittleMissMuffet',
+        'test-data': True
+        }
+
+    r = requests.post(entries_url, headers=headers, json=entry)
+    if r.status_code == 201:
+        entry_url2 = urljoin(BASE_URL, r.headers['Location'])
+        value_ref2  = urljoin(BASE_URL, r.json()['valueRef'])
+        print 'correctly created entry: %s valueRef: %s' % (entries_url, value_ref)
+    else:
+        print 'failed to create entry %s %s %s' % (entries_url, r.status_code, r.text)
+        return
+
+    r = requests.put(value_ref2, headers=headers, data='first entry value')
+    if r.status_code == 201 or r.status_code == 200:
+        loc = r.headers['Location' if r.status_code == 201 else 'Content-Location']
+        print 'correctly created value: %s ' % (loc)
+        value_url = urljoin(BASE_URL, loc)
+    else:
+        print 'failed to create value %s %s %s' % (value_ref2, r.status_code, r.text)
+        return
+
+    headers = {'Accept': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
+    r = requests.get(map_entries, headers=headers, json=map)
+    if r.status_code == 200:
+        print json.dumps(r.json(), indent=4)
+        print 'correctly retrieved map entries: %s' % map_url 
+    else:
+        print 'failed to retrieve map entries %s %s %s' % (map_url, r.status_code, r.text)
+        return
+
         
 if __name__ == '__main__':
     main()

@@ -129,7 +129,7 @@ function getMap(req, res, id) {
 }
 
 function deleteMap(req, res, id) {
-  lib.ifAllowedThen(req, res, null, 'delete', function() {
+  lib.ifAllowedThen(req, res, null, '_resource', 'delete', function() {
     ps.deleteMapThen(req, res, id, function (map) {
       lib.found(req, res, map);
     });
@@ -137,11 +137,25 @@ function deleteMap(req, res, id) {
 }
 
 function updateMap(req, res, id, patch) {
-  lib.ifAllowedThen(req, res, null, 'update', function(map) {
+  lib.ifAllowedThen(req, res, null, '_resource', 'update', function(map) {
     var patchedMap = lib.mergePatch(map, patch);
     ps.updateMapThen(req, res, id, map, patchedMap, function () {
       patchedPermissions._self = selfURL(id, req); 
       lib.found(req, res, map);
+    });
+  });
+}
+
+function getEntries(req, res, mapID) {
+  lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'read', function(map) {
+    ps.withEntriesDo(req, res, mapID, function (entries) {
+      var apiEntries = entries.map(x=>{
+        var result = {}
+        Object.assign(result, x.data)
+        addCalculatedEntryProperties(req, result, x.mapid, x.key)
+        return result
+      }) 
+      lib.found(req, res, {isA: 'Collection', _self: '//' + req.headers.host + req.url, contents: apiEntries});
     });
   });
 }
@@ -169,12 +183,15 @@ function requestHandler(req, res) {
         } else 
           lib.methodNotAllowed(req, res, ['GET', 'DELETE', 'PATCH']);
       } else if (splitPath.length == 3 && splitPath[2] == 'entries') { /* url of form /MAPS-xxxxxx/entries */
-        if (req.method == 'POST') {
+        var mapID = splitPath[1].substring(MAPS.length-1)
+        if (req.method == 'POST') 
           lib.getServerPostObject(req, res, function(req, res, entry) {
-            createEntry(req, res, splitPath[1].substring(MAPS.length-1), entry)
+            createEntry(req, res, mapID, entry)
           })
-        } else 
-          lib.methodNotAllowed(req, res, ['GET', 'DELETE', 'PATCH'])
+        else if (req.method == 'GET')
+          getEntries(req, res, mapID)
+        else
+          lib.methodNotAllowed(req, res, ['GET', 'POST'])
       }
     } else if (req_url.pathname.lastIndexOf(VALUES, 0) > -1) {
       let splitPath = req_url.pathname.split('/')
