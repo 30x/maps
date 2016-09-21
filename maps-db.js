@@ -63,6 +63,23 @@ function withMapDo(id, callback) {
   });
 }
 
+function withMapByNameDo(ns, name, callback) {
+  pool.query(`SELECT id, data FROM maps WHERE data @> '{"namespace": "${ns}", "name": "${name}"}'`, function (err, pg_res) {
+    if (err) {
+      callback(err);
+    }
+    else {
+      if (pg_res.rowCount === 0) { 
+        callback(404);
+      }
+      else {
+        var row = pg_res.rows[0];
+        callback(null, row.data, row.id);
+      }
+    }
+  });
+}
+
 function withEntriesDo(mapid, callback) {
   pool.query(`SELECT * FROM entries WHERE mapid = '${mapid}'`, function (err, pg_res) {
     if (err) {
@@ -142,4 +159,5 @@ exports.withMapDo = withMapDo
 exports.createEntryThen = createEntryThen
 exports.upsertValueThen = upsertValueThen
 exports.withEntriesDo = withEntriesDo
+exports.withMapByNameDo = withMapByNameDo
 exports.init = init

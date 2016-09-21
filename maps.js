@@ -116,16 +116,28 @@ function createValue(req, res, mapID, key, value) {
   }  
 }
 
+function returnMap(req, res, map, id) {
+      addCalculatedMapProperties(req, map, makeMapURL(req, id))
+      map._permissions = `protocol://authority/permissions?${map._self}`
+      map._permissionsHeirs = `protocol://authority/permissions-heirs?${map._self}`
+      lib.externalizeURLs(map, req.headers.host)
+      lib.found(req, res, map)
+}
+
 function getMap(req, res, id) {
   lib.ifAllowedThen(req, res, null, '_resource', 'read', function() {
     ps.withMapDo(req, res, id, function(map) {
-      addCalculatedMapProperties(req, map, makeMapURL(req, id))
-      map._permissions = `protocol://authority/permissions?${map._self}`;
-      map._permissionsHeirs = `protocol://authority/permissions-heirs?${map._self}`;
-      lib.externalizeURLs(map, req.headers.host);
-      lib.found(req, res, map);
+      returnMap(req, res, map, id)
     });
   });
+}
+
+function getMapByName(req, res, ns, name) {
+  ps.withMapByNameDo(req, res, ns, name, function(map, id) {
+    lib.ifAllowedThen(req, res, makeMapURL(req, id), '_resource', 'read', function() {
+      returnMap(req, res, map, id)
+    })
+  })
 }
 
 function deleteMap(req, res, id) {
@@ -162,6 +174,15 @@ function getEntries(req, res, mapID) {
   });
 }
 
+function getNameParts(req, res, id, callback) {
+  let splitID = id.split(':')
+  if (splitID.length == 2) {
+    let [part1, part2] = splitID
+    callback(part1, part2)
+  } else
+    lib.badRequest(res, `id must be composed of two simple names separated by a ":" (${id})`)
+}
+
 function requestHandler(req, res) {
   if (req.url == '/maps') 
     if (req.method == 'POST')
@@ -170,20 +191,20 @@ function requestHandler(req, res) {
       lib.methodNotAllowed(req, res, ['POST'])
   else {
     var req_url = url.parse(req.url);
-    if (req_url.pathname.lastIndexOf(MAPS, 0) > -1) {
+    if (req_url.pathname.lastIndexOf(MAPS, 0) > -1) { /* url of form /MAPS-xxxxxx */
       let splitPath = req_url.pathname.split('/')
       if (splitPath.length == 2) {
         let id = req_url.pathname.substring(MAPS.length);
-        if (req.method == 'GET') {
+        if (req.method == 'GET') 
           getMap(req, res, id);
-        } else if (req.method == 'DELETE') { 
+        else if (req.method == 'DELETE') 
           deleteMap(req, res, id);
-        } else if (req.method == 'PATCH') { 
+        else if (req.method == 'PATCH') 
           lib.getServerPostObject(req, res, function (req, res, jso) {
             updateMap(req, res, id, jso)
-          });
-        } else 
-          lib.methodNotAllowed(req, res, ['GET', 'DELETE', 'PATCH']);
+          })
+        else 
+          lib.methodNotAllowed(req, res, ['GET', 'DELETE', 'PATCH'])
       } else if (splitPath.length == 3 && splitPath[2] == 'entries') { /* url of form /MAPS-xxxxxx/entries */
         var mapID = splitPath[1].substring(MAPS.length-1)
         if (req.method == 'POST') 
@@ -197,21 +218,28 @@ function requestHandler(req, res) {
       }
     } else if (req_url.pathname.lastIndexOf(VALUES, 0) > -1) {
       let splitPath = req_url.pathname.split('/')
-      if (splitPath.length == 2) {
-        if (req.method == 'PUT') {
-          let id = req_url.pathname.substring(VALUES.length);
-          let splitID = id.split(':')
-          if (splitID.length == 2) {
-            let [mapID, key] = splitID
+      if (splitPath.length == 2)
+        if (req.method == 'PUT')
+          getNameParts(req, res, req_url.pathname.substring(VALUES.length), function(mapID, key) {
             lib.getServerPostText(req, res, function(req, res, value) {
               createValue(req, res, mapID, key, value)
             })
-          } else
-            lib.badRequest(res, `invalid value id: ${id}`)
-        } else 
+          })
+        else 
           lib.methodNotAllowed(req, res, ['PUT'])
-      } else  
+      else  
         lib.notFound(req, res)      
+    } else if (req_url.pathname.lastIndexOf('/maps;', 0) > -1) {
+      let splitPath = req_url.pathname.split('/')
+      if (splitPath.length == 2) {
+        if (req.method == 'GET') {
+          let id = req_url.pathname.substring('/maps;'.length);
+          getNameParts(req, res, req_url.pathname.substring(VALUES.length), function(ns, name) {
+            getMapByName(req, res, ns, name);         
+          })
+        } else 
+          lib.methodNotAllowed(req, res, ['GET'])
+      }      
     } else 
       lib.notFound(req, res)
   }

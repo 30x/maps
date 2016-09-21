@@ -143,10 +143,19 @@ def main():
     headers = {'Content-Type': 'application/merge-patch+json','Authorization': 'Bearer %s' % TOKEN1}
     r = requests.patch(map_url, headers=headers, json=patch)
     if r.status_code == 200:
-        print json.dumps(r.json(), indent=4)
         print 'correctly patched map: %s' % (map_url)
     else:
         print 'failed to patch map %s %s %s' % (map_url, r.status_code, r.text)
+        return
+
+    name_url = urljoin(BASE_URL, '/maps;acme:nursery-rhymes')
+    headers = {'Accept': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
+    r = requests.get(name_url, headers=headers, json=map)
+    if r.status_code == 200:
+        print 'correctly retrieved map by name: %s' % name_url 
+        print json.dumps(r.json(), indent=4)
+    else:
+        print 'failed to retrieve map by name %s %s %s' % (name_url, r.status_code, r.text)
         return
 
 
