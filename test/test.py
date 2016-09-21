@@ -57,7 +57,6 @@ def main():
     if r.status_code == 201:
         print 'correctly created map %s' % r.headers['Location']
         map_url = urljoin(BASE_URL, r.headers['Location'])
-        map_etag = r.headers['Etag'] 
     else:
         print 'failed to create map %s %s %s' % (maps_url, r.status_code, r.text)
         return
@@ -88,9 +87,8 @@ def main():
     r = requests.post(entries_url, headers=headers, json=entry)
     if r.status_code == 201:
         entry_url = urljoin(BASE_URL, r.headers['Location'])
-        entry_etag = r.headers['Etag'] 
         value_ref  = urljoin(BASE_URL, r.json()['valueRef'])
-        print 'correctly created entry: %s etag: %s valueRef: %s' % (entries_url, entry_etag, value_ref)
+        print 'correctly created entry: %s valueRef: %s' % (entries_url, value_ref)
     else:
         print 'failed to create entry %s %s %s' % (entries_url, r.status_code, r.text)
         return
@@ -98,9 +96,8 @@ def main():
     headers = {'Content-Type': 'text/plain','Authorization': 'Bearer %s' % TOKEN1}
     r = requests.put(value_ref, headers=headers, data='first entry value')
     if r.status_code == 201 or r.status_code == 200:
-        print 'correctly created value: %s etag: %s' % (r.headers['Location'], r.headers['Etag'])
+        print 'correctly created value: %s ' % (r.headers['Location'])
         value_url = urljoin(BASE_URL, r.headers['Location'])
-        value_etag = r.headers['Etag'] 
     else:
         print 'failed to create valiue %s %s %s' % (value_ref, r.status_code, r.text)
         return

@@ -46,9 +46,9 @@ function createMap(req, res, map) {
         // Create permissions first. If we fail after creating the permissions resource but before creating the main resource, 
         // there will be a useless but harmless permissions document.
         // If we do things the other way around, a map without matching permissions could cause problems.
-        ps.createMapThen(req, res, id, selfURL, map, function(etag) {
+        ps.createMapThen(req, res, id, selfURL, map, function() {
           addCalculatedMapProperties(req, map, selfURL)
-          lib.created(req, res, map, map._self, etag)
+          lib.created(req, res, map, map._self)
         });
       });
     }
@@ -91,9 +91,9 @@ function createEntry(req, res, mapID, entry) {
     else {
       lib.internalizeURLs(entry, req.headers.host)
       lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'create', function() {
-        ps.createEntryThen(req, res, mapID, key, entry, function(etag) {
+        ps.createEntryThen(req, res, mapID, key, entry, function() {
           addCalculatedEntryProperties(req, entry, mapID, key)
-          lib.created(req, res, entry, entry._self, etag)
+          lib.created(req, res, entry, entry._self)
         })
       })
     } 
@@ -107,8 +107,8 @@ function createValue(req, res, mapID, key, value) {
   } else {
     if (req.headers['content-type'] != null) {
       lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'create', function() {
-        ps.upsertValueThen(req, res, mapID, key, value, function(etag) {
-          lib.created(req, res, null, makeValueURL(req, mapID, key), etag);
+        ps.upsertValueThen(req, res, mapID, key, value, function() {
+          lib.created(req, res, null, makeValueURL(req, mapID, key));
         })
       })
     } else
@@ -118,30 +118,30 @@ function createValue(req, res, mapID, key, value) {
 
 function getMap(req, res, id) {
   lib.ifAllowedThen(req, res, null, '_resource', 'read', function() {
-    ps.withMapDo(req, res, id, function(map , etag) {
+    ps.withMapDo(req, res, id, function(map) {
       addCalculatedMapProperties(req, map, makeMapURL(req, id))
       map._permissions = `protocol://authority/permissions?${map._self}`;
       map._permissionsHeirs = `protocol://authority/permissions-heirs?${map._self}`;
       lib.externalizeURLs(map, req.headers.host);
-      lib.found(req, res, map, etag);
+      lib.found(req, res, map);
     });
   });
 }
 
 function deleteMap(req, res, id) {
   lib.ifAllowedThen(req, res, null, 'delete', function() {
-    ps.deleteMapThen(req, res, id, function (map, etag) {
-      lib.found(req, res, map, map.etag);
+    ps.deleteMapThen(req, res, id, function (map) {
+      lib.found(req, res, map);
     });
   });
 }
 
 function updateMap(req, res, id, patch) {
-  lib.ifAllowedThen(req, res, null, 'update', function(map, etag) {
+  lib.ifAllowedThen(req, res, null, 'update', function(map) {
     var patchedMap = lib.mergePatch(map, patch);
-    ps.updateMapThen(req, res, id, map, patchedMap, etag, function (etag) {
+    ps.updateMapThen(req, res, id, map, patchedMap, function () {
       patchedPermissions._self = selfURL(id, req); 
-      lib.found(req, res, map, etag);
+      lib.found(req, res, map);
     });
   });
 }
