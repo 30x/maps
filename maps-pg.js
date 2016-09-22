@@ -22,14 +22,15 @@ function createMapThen(id, map, callback) {
   });
 }
 
-function createEntryThen(mapid, key, map, callback) {
-  var query = `INSERT INTO entries (mapid, key, data) values('${mapid}', '${key}', '${JSON.stringify(map)}')`;
+function createEntryThen(mapid, key, entry, callback) {
+  var etag = uuid() //TODO: put etag in db
+  var query = `INSERT INTO entries (mapid, key, data) values('${mapid}', '${key}', '${JSON.stringify(entry)}')`;
   pool.query(query, function (err, pg_res) {
     if (err) {
       callback(err);
     }
     else {
-      callback();
+      callback(null, etag);
     }
   });
 }
@@ -57,7 +58,7 @@ function withMapDo(id, callback) {
       }
       else {
         var row = pg_res.rows[0];
-        callback(null, row.data);
+        callback(null, row.data, null); // todo: add back etag
       }
     }
   });
@@ -75,7 +76,7 @@ function withValueDo(mapID, key, callback) {
       }
       else {
         var row = pg_res.rows[0];
-        callback(null, row.metadata, row.value);
+        callback(null, row.metadata, row.value, null); // TODO: return etag
       }
     }
   });
@@ -92,7 +93,7 @@ function withMapByNameDo(ns, name, callback) {
       }
       else {
         var row = pg_res.rows[0];
-        callback(null, row.data, row.id);
+        callback(null, row.data, row.id, null); //TODO: return etag
       }
     }
   });
@@ -104,7 +105,7 @@ function withEntriesDo(mapid, callback) {
       callback(err);
     }
     else {
-      callback(null, pg_res.rows);
+      callback(null, pg_res.rows); // TODO etag in each entry
     }
   });
 }
@@ -138,7 +139,7 @@ function updateMapThen(id, patchedMap, callback) {
         callback(404);
       }
       else {
-        callback(null);
+        callback(null); // TODO: add etag
       }
     }
   });

@@ -60,8 +60,9 @@ const deleteMapEntry = 'DELETE FROM ' + config.databaseKeyspace + '.entries WHER
 const deleteMapValue = 'DELETE FROM ' + config.databaseKeyspace + '.values WHERE mapuuid = ? and key = ?'
 
 
-function createMap(namespace, mapuuid, map, callback) {
+function createMapThen(mapuuid, map, callback) {
   var etag = uuidgen.v4()
+  var namespace = map.namespace
   map.name = map.name ? map.name : '' // default map name to empty string if it doesn't exist
   const batchQueries = [
     {query: insertMap, params: [cassandra.types.Uuid.fromString(mapuuid), JSON.stringify(map), etag]},
@@ -85,7 +86,7 @@ function createMap(namespace, mapuuid, map, callback) {
 }
 
 
-function updateMap(mapuuid, patchedMap, callback) {
+function updateMapThen(mapuuid, patchedMap, callback) { // TODO: watch for change to name or namespace
   var etag = uuidgen.v4()
   client.execute(insertMap, [cassandra.types.Uuid.fromString(mapuuid), JSON.stringify(patchedMap), etag], {prepare: true}, function (err, result) {
     if (err) {
@@ -99,7 +100,7 @@ function updateMap(mapuuid, patchedMap, callback) {
 }
 
 
-function createMapEntry(mapuuid, key, callback) {
+function createEntryThen(mapuuid, key, entry, callback) {
   var etag = uuidgen.v4()
   client.execute(insertMapEntry, [cassandra.types.Uuid.fromString(mapuuid), key, etag], {prepare: true}, function (err, result) {
     if (err)
@@ -111,13 +112,16 @@ function createMapEntry(mapuuid, key, callback) {
   })
 }
 
+function upsertValueThen(mapuuid, key, metadata, value, callback) {
+  createMapValue(mapuuid, key, metadata, value, callback)
+}
 
 function createMapValue(mapuuid, key, contentType, value, callback) {
   if (!(value instanceof Buffer)) {
     callback(true, {error: 'Value must be a Buffer'})
   }
   var etag = uuidgen.v4()
-  client.execute(insertMapValue, [cassandra.types.Uuid.fromString(mapuuid), key, contentType, value, etag], {prepare: true}, function (err, result) {
+  client.execute(insertMapValue, [cassandra.types.Uuid.fromString(mapuuid), key, JSON.stringify(contentType), value, etag], {prepare: true}, function (err, result) {
     if (err)
       callback(err)
     else {
@@ -128,7 +132,7 @@ function createMapValue(mapuuid, key, contentType, value, callback) {
 }
 
 
-function getMap(mapuuid, callback) {
+function withMapDo(mapuuid, callback) {
   client.execute(selectMap, [cassandra.types.Uuid.fromString(mapuuid)], {prepare: true}, function (err, result) {
     if (err)
       callback(err)
@@ -143,16 +147,18 @@ function getMap(mapuuid, callback) {
   })
 }
 
-function getMapByName(namespace, name, callback) {
+function withMapByNameDo(namespace, name, callback) {
   getMapUuid(namespace, name, function(err, mapuuid){
     if (err)
       callback(err)
     else{
-     getMap(mapuuid, function (err, map, etag) {
+     withMapDo(mapuuid, function (err, map, etag) {
         if (err)
           callback(err)
+        else if (map == null)
+          callback(404)
         else
-          callback(null, map, etag)
+          callback(null, map, mapuuid, etag)
       })
     }
   })
@@ -172,12 +178,12 @@ function getMapUuid(namespace, name, callback) {
 }
 
 
-function getMapEntries(mapuuid, callback) {
+function withEntriesDo(mapuuid, callback) {
   client.execute(selectEntries, [cassandra.types.Uuid.fromString(mapuuid)], {prepare: true}, function (err, result) {
     if (err)
       callback(err)
     else
-      callback(null, result.rows.length > 0 ? result.rows : null)
+      callback(null, result.rows.length > 0 ? result.rows : null) // TODO: change fields to be named mapid, key, data
   })
 }
 
@@ -197,7 +203,7 @@ function getMapEntry(mapuuid, key, callback) {
 }
 
 
-function getMapValue(mapuuid, key, callback) {
+function withValueDo(mapuuid, key, callback) {
   client.execute(selectValue, [cassandra.types.Uuid.fromString(mapuuid), key], {prepare: true}, function (err, result) {
     if (err)
       callback(err)
@@ -208,7 +214,7 @@ function getMapValue(mapuuid, key, callback) {
         type = result.rows[0].get('type')
         etag = result.rows[0].get('etag')
       }
-      callback(null, value, type, etag)
+      callback(null, JSON.parse(type), value, etag)
   })
 }
 
@@ -264,7 +270,7 @@ function removeMapFromNamespace(namespace, mapuuid, callback) {
   })
 }
 
-function removeMap(namespace, mapuuid, callback) {
+function deleteMapThen(mapuuid, callback) {
   client.eachRow(selectEntries, [mapuuid], function (n, row) {
       //the callback will be invoked per each row as soon as they are received
       removeMapEntry(row.get('mapuuid'), row.get('key'), function (err, result) {
@@ -276,12 +282,14 @@ function removeMap(namespace, mapuuid, callback) {
       if (err)
         callback(err)
       else {
-        getMap(mapuuid, function (err, map, etag) {
+        withMapDo(mapuuid, function (err, map, etag) {
           if (err)
             callback(err)
-          else {
-            if (map && JSON.parse(map).name) {
-              var name = JSON.parse(map).name
+          else { // TODO: worry about order for the failure case
+            var oMap = map ? JSON.parse(map) : null
+            var name = oMap ? oMap.name : null
+            var namespace = oMap ? oMap.namespace : null
+            if (name) {
               removeMapIndex(null, name, function (err, result) {
               })
               removeMapIndex(namespace, name, function (err, result) {
@@ -393,15 +401,15 @@ exports.createMap = createMap
 exports.updateMap = updateMap
 exports.createMapEntry = createMapEntry
 exports.createMapValue = createMapValue
-exports.getMap = getMap
-exports.getMapByName = getMapByName
+exports.withMapDo = withMapDo
+exports.withMapByNameDo = withMapByNameDo
 exports.getMapUuid = getMapUuid
-exports.getMapEntries = getMapEntries
+exports.withEntriesDo = withEntriesDo
 exports.getMapEntry = getMapEntry
-exports.getMapValue = getMapValue
+exports.withValueDo = withValueDo
 exports.removeMapEntry = removeMapEntry
 exports.removeMapValue = removeMapValue
 exports.removeMapIndex = removeMapIndex
-exports.removeMap = removeMap
+exports.deleteMapThen = deleteMapThen
 exports.getMapsFromNamespace = getMapsFromNamespace
 exports.init = init
