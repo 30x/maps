@@ -12,20 +12,30 @@ var config = {
 var pool = new Pool(config);
 
 function createMapThen(id, map, callback) {
-  var query = `INSERT INTO maps (id, data) values('${id}', '${JSON.stringify(map)}')`;
+  var etag = uuid()
+  var query = `INSERT INTO maps (id, etag, data) values('${id}', '${etag}', '${JSON.stringify(map)}')`;
   pool.query(query, function (err, pg_res) {
-    if (err) {
-      callback(err);
-    }
-    else {
-      callback();
-    }
-  });
+    if (err) 
+      callback(err)
+    else
+      callback(null, etag)
+  })
 }
 
 function createEntryThen(mapid, key, entry, callback) {
-  var etag = uuid() //TODO: put etag in db
-  var query = `INSERT INTO entries (mapid, key, data) values('${mapid}', '${key}', '${JSON.stringify(entry)}')`;
+  var etag = uuid()
+  var query = `INSERT INTO entries (mapid, key, etag, data) values('${mapid}', '${key}', '${etag}', '${JSON.stringify(entry)}')`;
+  pool.query(query, function (err, pg_res) {
+    if (err)
+      callback(err)
+    else
+      callback(null, etag)
+  })
+}
+
+function upsertValueThen(mapid, key, metadata, value, callback) {
+  var etag = uuid()
+  var query = `INSERT INTO values (mapid, key, etag, metadata, value) values('${mapid}', '${key}', '${etag}', '${JSON.stringify(metadata)}', '${value}') ON CONFLICT (mapid, key) DO UPDATE SET (etag, metadata, value) = (EXCLUDED. etag, EXCLUDED.metadata, EXCLUDED.value)`;
   pool.query(query, function (err, pg_res) {
     if (err) {
       callback(err);
@@ -36,20 +46,8 @@ function createEntryThen(mapid, key, entry, callback) {
   });
 }
 
-function upsertValueThen(mapid, key, metadata, value, callback) {
-  var query = `INSERT INTO values (mapid, key, metadata, value) values('${mapid}', '${key}', '${JSON.stringify(metadata)}', '${value}') ON CONFLICT (mapid, key) DO UPDATE SET (metadata, value) = (EXCLUDED.metadata, EXCLUDED.value)`;
-  pool.query(query, function (err, pg_res) {
-    if (err) {
-      callback(err);
-    }
-    else {
-      callback();
-    }
-  });
-}
-
 function withMapDo(id, callback) {
-  pool.query(`SELECT data FROM maps WHERE id = '${id}'`, function (err, pg_res) {
+  pool.query(`SELECT etag, data FROM maps WHERE id = '${id}'`, function (err, pg_res) {
     if (err) {
       callback(err);
     }
@@ -59,14 +57,14 @@ function withMapDo(id, callback) {
       }
       else {
         var row = pg_res.rows[0];
-        callback(null, row.data, null); // todo: add back etag
+        callback(null, row.data, row.etag);
       }
     }
   });
 }
 
 function withValueDo(mapID, key, callback) {
-  var query = `SELECT metadata, value FROM values WHERE mapid = '${mapID}' AND key = '${key}'`
+  var query = `SELECT etag, metadata, value FROM values WHERE mapid = '${mapID}' AND key = '${key}'`
   pool.query(query, function (err, pg_res) {
     if (err) {
       callback(err);
@@ -77,14 +75,14 @@ function withValueDo(mapID, key, callback) {
       }
       else {
         var row = pg_res.rows[0];
-        callback(null, row.metadata, row.value, null); // TODO: return etag
+        callback(null, row.metadata, row.value, row.etag);
       }
     }
   });
 }
 
 function withMapByNameDo(ns, name, callback) {
-  pool.query(`SELECT id, data FROM maps WHERE data @> '{"namespace": "${ns}", "name": "${name}"}'`, function (err, pg_res) {
+  pool.query(`SELECT id, etag, data FROM maps WHERE data @> '{"namespace": "${ns}", "name": "${name}"}'`, function (err, pg_res) {
     if (err) {
       callback(err);
     }
@@ -94,7 +92,7 @@ function withMapByNameDo(ns, name, callback) {
       }
       else {
         var row = pg_res.rows[0];
-        callback(null, row.data, row.id, null); //TODO: return etag
+        callback(null, row.data, row.id, row.etag);
       }
     }
   });
@@ -106,7 +104,7 @@ function withEntriesDo(mapid, callback) {
       callback(err);
     }
     else {
-      callback(null, pg_res.rows); // TODO etag in each entry
+      callback(null, pg_res.rows);
     }
   });
 }
@@ -130,7 +128,8 @@ function deleteMapThen(id, callback) {
 }
 
 function updateMapThen(id, patchedMap, callback) {
-  var query = `UPDATE maps SET data = ('${JSON.stringify(patchedMap)}') WHERE id = '${id}'`;
+  var etag = uuid()
+  var query = `UPDATE maps SET (etag, data) = ('${etag}', '${JSON.stringify(patchedMap)}') WHERE id = '${id}'`;
   pool.query(query, function (err, pg_res) {
     if (err) {
       callback(err);
@@ -140,7 +139,7 @@ function updateMapThen(id, patchedMap, callback) {
         callback(404);
       }
       else {
-        callback(null); // TODO: add etag
+        callback(null, etag);
       }
     }
   });
@@ -155,11 +154,11 @@ function executeQuery(query, callback) {
 }
 
 function init(callback) {
-  var query = 'CREATE TABLE IF NOT EXISTS maps (id text primary key, data jsonb);'
+  var query = 'CREATE TABLE IF NOT EXISTS maps (id text primary key, etag text, data jsonb);'
   executeQuery(query, function() {
-    var query = 'CREATE TABLE IF NOT EXISTS entries (mapid text, key text, data jsonb, PRIMARY KEY (mapid, key));'
+    var query = 'CREATE TABLE IF NOT EXISTS entries (mapid text, key text, etag text, data jsonb, PRIMARY KEY (mapid, key));'
     executeQuery(query, function() {
-      var query = 'CREATE TABLE IF NOT EXISTS values (mapid text, key text, metadata jsonb, value bytea, PRIMARY KEY (mapid, key));'
+      var query = 'CREATE TABLE IF NOT EXISTS values (mapid text, key text, etag text, metadata jsonb, value bytea, PRIMARY KEY (mapid, key));'
       executeQuery(query, function() {
         console.log('maps-db: connected to PG, config: ', config);
         callback();

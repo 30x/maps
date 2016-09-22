@@ -46,9 +46,9 @@ function createMap(req, res, map) {
         // Create permissions first. If we fail after creating the permissions resource but before creating the main resource, 
         // there will be a useless but harmless permissions document.
         // If we do things the other way around, a map without matching permissions could cause problems.
-        ps.createMapThen(req, res, id, selfURL, map, function() {
+        ps.createMapThen(req, res, id, selfURL, map, function(etag) {
           addCalculatedMapProperties(req, map, selfURL)
-          lib.created(req, res, map, map.self)
+          lib.created(req, res, map, map.self, etag)
         });
       });
     }
@@ -91,9 +91,9 @@ function createEntry(req, res, mapID, entry) {
     else {
       lib.internalizeURLs(entry, req.headers.host)
       lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'create', function() {
-        ps.createEntryThen(req, res, mapID, key, entry, function() {
+        ps.createEntryThen(req, res, mapID, key, entry, function(etag) {
           addCalculatedEntryProperties(req, entry, mapID, key)
-          lib.created(req, res, entry, entry.self)
+          lib.created(req, res, entry, entry.self, etag)
         })
       })
     } 
@@ -107,8 +107,8 @@ function createValue(req, res, mapID, key, value) {
   else {
     if (req.headers['content-type'] != null) {
       lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'create', function() {
-        ps.upsertValueThen(req, res, mapID, key, value, function() {
-          lib.created(req, res, null, makeValueURL(req, mapID, key))
+        ps.upsertValueThen(req, res, mapID, key, value, function(etag) {
+          lib.created(req, res, null, makeValueURL(req, mapID, key), etag)
         })
       })
     } else
@@ -128,26 +128,26 @@ function getValue(req, res, mapID, key) {
     })
 }
 
-function returnMap(req, res, map, id) {
+function returnMap(req, res, map, id, etag) {
   addCalculatedMapProperties(req, map, makeMapURL(req, id))
   map._permissions = `protocol://authority/permissions?${map.self}`
   map._permissionsHeirs = `protocol://authority/permissions-heirs?${map.self}`
   lib.externalizeURLs(map, req.headers.host)
-  lib.found(req, res, map)
+  lib.found(req, res, map, etag)
 }
 
 function getMap(req, res, id) {
   lib.ifAllowedThen(req, res, null, '_resource', 'read', function() {
-    ps.withMapDo(req, res, id, function(map) {
-      returnMap(req, res, map, id)
+    ps.withMapDo(req, res, id, function(map, etag) {
+      returnMap(req, res, map, id, etag)
     });
   });
 }
 
 function getMapByName(req, res, ns, name) {
-  ps.withMapByNameDo(req, res, ns, name, function(map, id) {
+  ps.withMapByNameDo(req, res, ns, name, function(map, id, etag) {
     lib.ifAllowedThen(req, res, makeMapURL(req, id), '_resource', 'read', function() {
-      returnMap(req, res, map, id)
+      returnMap(req, res, map, id, etag)
     })
   })
 }
@@ -164,9 +164,9 @@ function updateMap(req, res, id, patch) {
   lib.ifAllowedThen(req, res, makeMapURL(req, id), '_resource', 'update', function(map) {
     ps.withMapDo(req, res, id, function(map) {
       var patchedMap = lib.mergePatch(map, patch);
-      ps.updateMapThen(req, res, id, map, patchedMap, function () {
+      ps.updateMapThen(req, res, id, map, patchedMap, function (etag) {
         addCalculatedMapProperties(req, patchedMap, makeMapURL(req, id)) 
-        lib.found(req, res, patchedMap);
+        lib.found(req, res, patchedMap, etag);
       })
     })
   })
@@ -176,10 +176,9 @@ function getEntries(req, res, mapID) {
   lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'read', function(map) {
     ps.withEntriesDo(req, res, mapID, function (entries) {
       var apiEntries = entries.map(x=>{
-        var result = {}
-        Object.assign(result, x.data)
-        addCalculatedEntryProperties(req, result, x.mapid, x.key)
-        return result
+        x.data.etag = x.etag
+        addCalculatedEntryProperties(req, x.data, x.mapid, x.key)
+        return x.data
       }) 
       lib.found(req, res, {isA: 'Collection', self: '//' + req.headers.host + req.url, contents: apiEntries});
     });
