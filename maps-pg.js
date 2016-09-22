@@ -1,5 +1,6 @@
 'use strict';
 var Pool = require('pg').Pool;
+var uuid = require('node-uuid')
 
 var config = {
   host: process.env.PG_HOST,
