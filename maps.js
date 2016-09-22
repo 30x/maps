@@ -237,7 +237,7 @@ function requestHandler(req, res) {
       if (splitPath.length == 2)
         if (req.method == 'PUT')
           getNameParts(req, res, req_url.pathname.substring(VALUES.length), function(mapID, key) {
-            lib.getServerPostText(req, res, function(req, res, value) {
+            lib.getServerPostBuffer(req, res, function(req, res, value) {
               createValue(req, res, mapID, key, value)
             })
           })

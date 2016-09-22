@@ -295,6 +295,11 @@ function withEntriesDo(mapId, callback) {
     if (err)
       callback(err)
     else
+      if(result.rows.length > 0){
+        result.rows.forEach(function(entry){
+          entry.data = JSON.parse(entry.data)
+        })
+      }
       callback(null, result.rows.length > 0 ? result.rows : null)
   })
 }

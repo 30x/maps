@@ -1,6 +1,12 @@
 'use strict';
-var db = require('./maps-pg.js');
-var lib = require('http-helper-functions');
+
+var db;
+if( process.env.DBMS === 'pg')
+  db = require('./maps-pg.js')
+else
+  db = require('./maps-cass.js')
+
+var lib = require('http-helper-functions')
 
 function withErrorHandling(req, res, callback) {
   return function (err) {
