@@ -139,8 +139,8 @@ function getValue(req, res, mapID, key) {
     lib.unauthorized(req, res);
   else
     lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'read', function() {
-      ps.withValueDo(req, res, mapID, key, function(metadata, value) {
-        lib.found(req, res, value, null, makeValueURL(req, mapID, key), metadata['Content-Type'])
+      ps.withValueDo(req, res, mapID, key, function(metadata, value, etag) {
+        lib.found(req, res, value, etag, makeValueURL(req, mapID, key), metadata['Content-Type'])
       })
     })
 }

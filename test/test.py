@@ -132,7 +132,7 @@ def main():
     r = requests.get(value_ref2, headers=headers)
     if r.status_code == 200:
         loc = r.headers['Content-Location']
-        print 'correctly got value at %s length: %s text: %s etag: %s' % (loc, len(r.text), r.text, r.headers['etag'])
+        print 'correctly got value at %s length: %s etag: %s text: %s' % (loc, len(r.text), r.headers['etag'], r.text)
     else:
         print 'failed to get value %s %s %s' % (value_ref2, r.status_code, r.text)
         return
