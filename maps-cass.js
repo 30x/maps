@@ -63,18 +63,17 @@ const deleteMapValue = 'DELETE FROM ' + config.databaseKeyspace + '.values WHERE
 
 function createMapThen(mapId, map, callback) {
   var etag = uuidgen.v4()
-  var namespace = map.namespace
-  map.name = map.name ? map.name : null // default map name to empty string if it doesn't exist
+  map.namespace = map.namespace ? map.namespace : null // default map namespace to null if it doesn't exist
+  map.name = map.name ? map.name : null // default map name to null if it doesn't exist
   const batchQueries = [
     {query: insertMap, params: [cassandra.types.Uuid.fromString(mapId), JSON.stringify(map), etag]},
   ]
-  if (map && map.name && !namespace)
+  if (map && map.name && !map.namespace)
     batchQueries.push({query: insertIndex, params: [map.name, cassandra.types.Uuid.fromString(mapId)]})
-  if (namespace)
-    batchQueries.push({query: insertNamespace, params: [namespace, cassandra.types.Uuid.fromString(mapId), map.name]})
-    if (map.name !== '') // add index entry for namespace:mapname if mapname wasn't empty
-      var nsName = namespace + SEPARATOR + map.name
-      batchQueries.push({query: insertIndex, params: [nsName, cassandra.types.Uuid.fromString(mapId)]})
+  if (map.namespace)
+    batchQueries.push({query: insertNamespace, params: [map.namespace, cassandra.types.Uuid.fromString(mapId), map.name]})
+    if (map.name) // add index entry for namespace:mapname if mapname wasn't empty
+      batchQueries.push({query: insertIndex, params: [getMapName(map.namespace, map.name), cassandra.types.Uuid.fromString(mapId)]})
   client.batch(batchQueries, {prepare: true}, function (err, result) {
     if (err) {
       callback(err)
@@ -254,7 +253,12 @@ function withMapDo(mapId, callback) {
         map = result.rows[0].get('map')
         etag = result.rows[0].get('etag')
       }
-      callback(null, JSON.parse(map), etag)
+      map = JSON.parse(map)
+      if(map.name === null)
+        delete map.name
+      if(map.namespace === null)
+        delete map.namespace
+      callback(null, map, etag)
 
   })
 }
