@@ -163,11 +163,26 @@ def main():
     r = requests.get(name_url, headers=headers, json=map)
     if r.status_code == 200:
         print 'correctly retrieved map by name: %s etag: %s' % (name_url, r.headers['etag']) 
-        print json.dumps(r.json(), indent=4)
     else:
         print 'failed to retrieve map by name %s %s %s' % (name_url, r.status_code, r.text)
         return
 
+    map = {
+        'isA': 'Map',
+        'name': 'nursery-rhymes',
+        'namespace': 'acme',
+        'test-data': True
+        }
+
+    # Create map
+
+    headers = {'Content-Type': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
+    r = requests.post(maps_url, headers=headers, json=map)
+    if r.status_code == 409:
+        print 'correctly refused to created map with duplicate name %s' % (r.text)
+    else:
+        print 'failed to reject map with duplicate name %s %s %s' % (maps_url, r.status_code, r.text)
+        return
 
 if __name__ == '__main__':
     main()

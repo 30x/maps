@@ -9,7 +9,22 @@ var MAPS    = '/bWFw-'
 var ENTRIES = '/ZW50-'
 var VALUES  = '/dmFs-'
 
-function verifyMap(req, map, user) {
+function verifyMapName(req, res, user, map, callback) {
+  if (!(map.name === undefined && map.namespace === undefined)) 
+    if (map.name === undefined || map.namespace === undefined)
+      lib.badRequest(res, `must provide both name and namespace or neither. name: ${map.name} namespace: ${map.namespace}`)
+    else
+      ps.db.withMapByNameDo(map.namespace, map.name, function(err, map) {
+        if (err != 404) 
+          if (err)
+            lib.badRequest(res, `unable to check for map name collision. err: ${err}`)
+          else
+            lib.duplicate(res, `duplicate map name ${map.namespace}:${map.name}`)
+      })
+  callback()  
+}
+
+function verifyMap(req, map, user, callback) {
   var rslt = lib.setStandardCreationProperties(req, map, user)
   if (map.isA != 'Map') 
     return `invalid JSON: "isA" property not set to "Map" ${JSON.stringify(map)}`
@@ -36,21 +51,23 @@ function createMap(req, res, map) {
     if (err !== null) 
       lib.badRequest(res, err);
     else {
-      lib.internalizeURLs(map, req.headers.host) 
-      var permissions = map.permissions
-      if (permissions !== undefined)
-        delete map.permissions;
-      var id = uuid()
-      var selfURL = makeMapURL(req, id)
-      lib.createPermissonsFor(req, res, selfURL, permissions, function(permissionsURL, permissions){
-        // Create permissions first. If we fail after creating the permissions resource but before creating the main resource, 
-        // there will be a useless but harmless permissions document.
-        // If we do things the other way around, a map without matching permissions could cause problems.
-        ps.createMapThen(req, res, id, selfURL, map, function(etag) {
-          addCalculatedMapProperties(req, map, selfURL)
-          lib.created(req, res, map, map.self, etag)
-        });
-      });
+      verifyMapName(req, res, user, map, function() {
+        lib.internalizeURLs(map, req.headers.host) 
+        var permissions = map.permissions
+        if (permissions !== undefined)
+          delete map.permissions;
+        var id = uuid()
+        var selfURL = makeMapURL(req, id)
+        lib.createPermissonsFor(req, res, selfURL, permissions, function(permissionsURL, permissions){
+          // Create permissions first. If we fail after creating the permissions resource but before creating the main resource, 
+          // there will be a useless but harmless permissions document.
+          // If we do things the other way around, a map without matching permissions could cause problems.
+          ps.createMapThen(req, res, id, selfURL, map, function(etag) {
+            addCalculatedMapProperties(req, map, selfURL)
+            lib.created(req, res, map, map.self, etag)
+          })
+        })
+      })
     }
   }
 }
@@ -163,10 +180,12 @@ function deleteMap(req, res, id) {
 function updateMap(req, res, id, patch) {
   lib.ifAllowedThen(req, res, makeMapURL(req, id), '_resource', 'update', function(map) {
     ps.withMapDo(req, res, id, function(map) {
-      var patchedMap = lib.mergePatch(map, patch);
-      ps.updateMapThen(req, res, id, map, patchedMap, function (etag) {
-        addCalculatedMapProperties(req, patchedMap, makeMapURL(req, id)) 
-        lib.found(req, res, patchedMap, etag);
+      var patchedMap = lib.mergePatch(map, patch)
+      verifyMapName(req, res, lib.getUser(req), map, function() {
+        ps.updateMapThen(req, res, id, map, patchedMap, function (etag) {
+          addCalculatedMapProperties(req, patchedMap, makeMapURL(req, id)) 
+          lib.found(req, res, patchedMap, etag);
+        })
       })
     })
   })

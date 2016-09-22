@@ -76,4 +76,5 @@ exports.upsertValueThen = upsertValueThen
 exports.withEntriesDo = withEntriesDo
 exports.withMapByNameDo = withMapByNameDo
 exports.withValueDo = withValueDo
+exports.db=db
 exports.init = init
