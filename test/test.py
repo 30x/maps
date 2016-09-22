@@ -69,6 +69,7 @@ def main():
         if map_url == map_url2:
             map = r.json()
             print 'correctly retrieved map: %s' % map_url 
+            print map
         else:
             print 'retrieved map at %s but Content-Location is wrong: %s' % (map_url, map_url2)
             return
@@ -132,7 +133,7 @@ def main():
     r = requests.get(value_ref2, headers=headers)
     if r.status_code == 200:
         loc = r.headers['Content-Location']
-        print 'correctly got value at %s : %s ' % (loc, r.text)
+        print 'correctly got value at %s length: %s text: %s ' % (loc, len(r.text), r.text)
     else:
         print 'failed to get value %s %s %s' % (value_ref2, r.status_code, r.text)
         return

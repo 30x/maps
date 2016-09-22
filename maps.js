@@ -123,8 +123,6 @@ function getValue(req, res, mapID, key) {
   else
     lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'read', function() {
       ps.withValueDo(req, res, mapID, key, function(metadata, value) {
-        if (metadata['Content-Type'] == 'text/plain')
-          value = value.toString()
         lib.found(req, res, value, null, makeValueURL(req, mapID, key), metadata['Content-Type'])
       })
     })
