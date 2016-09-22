@@ -21,10 +21,10 @@ function makeMapURL(req, mapID) {
 }
 
 function addCalculatedMapProperties(req, map, selfURL) {
-  map._self = selfURL; 
+  map.self = selfURL; 
   map.entries = `${selfURL}/entries`
-  map._permissions = `protocol://authority/permissions?${map._self}`;
-  map._permissionsHeirs = `protocol://authority/permissions-heirs?${map._self}`;
+  map._permissions = `protocol://authority/permissions?${map.self}`;
+  map._permissionsHeirs = `protocol://authority/permissions-heirs?${map.self}`;
 }
 
 function createMap(req, res, map) {
@@ -48,7 +48,7 @@ function createMap(req, res, map) {
         // If we do things the other way around, a map without matching permissions could cause problems.
         ps.createMapThen(req, res, id, selfURL, map, function() {
           addCalculatedMapProperties(req, map, selfURL)
-          lib.created(req, res, map, map._self)
+          lib.created(req, res, map, map.self)
         });
       });
     }
@@ -75,7 +75,7 @@ function makeValueURL(req, mapID, key) {
 }
 
 function addCalculatedEntryProperties(req, entry, mapID, key) {
-  entry._self = makeEntryURL(req, mapID, key)
+  entry.self = makeEntryURL(req, mapID, key)
   entry.value = makeValueURL(req, mapID, key)
 }
 
@@ -93,7 +93,7 @@ function createEntry(req, res, mapID, entry) {
       lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'create', function() {
         ps.createEntryThen(req, res, mapID, key, entry, function() {
           addCalculatedEntryProperties(req, entry, mapID, key)
-          lib.created(req, res, entry, entry._self)
+          lib.created(req, res, entry, entry.self)
         })
       })
     } 
@@ -130,8 +130,8 @@ function getValue(req, res, mapID, key) {
 
 function returnMap(req, res, map, id) {
   addCalculatedMapProperties(req, map, makeMapURL(req, id))
-  map._permissions = `protocol://authority/permissions?${map._self}`
-  map._permissionsHeirs = `protocol://authority/permissions-heirs?${map._self}`
+  map._permissions = `protocol://authority/permissions?${map.self}`
+  map._permissionsHeirs = `protocol://authority/permissions-heirs?${map.self}`
   lib.externalizeURLs(map, req.headers.host)
   lib.found(req, res, map)
 }
@@ -181,7 +181,7 @@ function getEntries(req, res, mapID) {
         addCalculatedEntryProperties(req, result, x.mapid, x.key)
         return result
       }) 
-      lib.found(req, res, {isA: 'Collection', _self: '//' + req.headers.host + req.url, contents: apiEntries});
+      lib.found(req, res, {isA: 'Collection', self: '//' + req.headers.host + req.url, contents: apiEntries});
     });
   });
 }

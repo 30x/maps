@@ -155,7 +155,7 @@ function executeQuery(query, callback) {
 }
 
 function init(callback) {
-  var query = 'CREATE TABLE IF NOT EXISTS map (id text primary key, data jsonb);'
+  var query = 'CREATE TABLE IF NOT EXISTS maps (id text primary key, data jsonb);'
   executeQuery(query, function() {
     var query = 'CREATE TABLE IF NOT EXISTS entries (mapid text, key text, data jsonb, PRIMARY KEY (mapid, key));'
     executeQuery(query, function() {
