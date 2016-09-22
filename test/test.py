@@ -184,5 +184,25 @@ def main():
         print 'failed to reject map with duplicate name %s %s %s' % (maps_url, r.status_code, r.text)
         return
 
+    entries_url = urljoin(BASE_URL, '/maps;acme:nursery-rhymes/entries')
+    headers = {'Accept': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
+    r = requests.get(entries_url, headers=headers, json=map)
+    if r.status_code == 200:
+        entries = r.json()
+        if 'contents' in entries and isinstance(entries['contents'], list):
+            print 'correctly retrieved map entries by name: %s' % (r.headers['Content-Location'])
+        else:
+            print 'wrong return type for map entries by name: %s' % (r.headers['Content-Location'])
+    else:
+        print 'failed to retrieve map entries by name %s %s %s' % (name_url, r.status_code, r.text)
+        return
+
+    map = {
+        'isA': 'Map',
+        'name': 'nursery-rhymes',
+        'namespace': 'acme',
+        'test-data': True
+        }
+
 if __name__ == '__main__':
     main()
