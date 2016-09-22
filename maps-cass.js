@@ -1,3 +1,4 @@
+'use strict'
 const cassandra = require('cassandra-driver')
 var uuidgen = require('node-uuid')
 const config = {
@@ -38,45 +39,46 @@ const SEPARATOR = '?'
 
 
 // inserts
-const insertNamespace = 'INSERT INTO ' + config.databaseKeyspace + '.namespaces (namespace, mapuuid, mapname) VALUES (?, ?, ?)'
-const insertMap = 'INSERT INTO ' + config.databaseKeyspace + '.maps (mapuuid, map, etag) VALUES (?, ?, ?)'
-const insertIndex = 'INSERT INTO ' + config.databaseKeyspace + '.indexes (name, mapuuid) VALUES (?, ?)'
-const insertMapEntry = 'INSERT INTO ' + config.databaseKeyspace + '.entries (mapuuid, key, etag) VALUES (?, ?, ?)'
-const insertMapValue = 'INSERT INTO ' + config.databaseKeyspace + '.values (mapuuid, key, type, value, etag) VALUES (? ,?, ?, ?, ?)'
+const insertNamespace = 'INSERT INTO ' + config.databaseKeyspace + '.namespaces (namespace, mapid, mapname) VALUES (?, ?, ?)'
+const insertMap = 'INSERT INTO ' + config.databaseKeyspace + '.maps (mapid, map, etag) VALUES (?, ?, ?)'
+const insertIndex = 'INSERT INTO ' + config.databaseKeyspace + '.indexes (name, mapid) VALUES (?, ?)'
+const insertMapEntry = 'INSERT INTO ' + config.databaseKeyspace + '.entries (mapid, key, data, etag) VALUES (?, ?, ?, ?)'
+const insertMapValue = 'INSERT INTO ' + config.databaseKeyspace + '.values (mapid, key, data, value, etag) VALUES (? ,?, ?, ?, ?)'
 
 // selects
 const selectNamespace = 'SELECT * FROM ' + config.databaseKeyspace + '.namespaces WHERE namespace = ?'
-const selectMap = 'SELECT * FROM ' + config.databaseKeyspace + '.maps WHERE mapuuid = ?'
-const selectMapUuidFromName = 'SELECT mapuuid FROM ' + config.databaseKeyspace + '.indexes WHERE name = ?'
-const selectEntries = 'SELECT * FROM ' + config.databaseKeyspace + '.entries WHERE mapuuid = ?'
-const selectEntry = 'SELECT * FROM ' + config.databaseKeyspace + '.entries WHERE mapuuid = ? and key = ?'
-const selectValue = 'SELECT type, value, etag FROM ' + config.databaseKeyspace + '.values WHERE mapuuid = ? and key = ?'
+const selectMap = 'SELECT * FROM ' + config.databaseKeyspace + '.maps WHERE mapid = ?'
+const selectmapIdFromName = 'SELECT mapid FROM ' + config.databaseKeyspace + '.indexes WHERE name = ?'
+const selectEntries = 'SELECT * FROM ' + config.databaseKeyspace + '.entries WHERE mapid = ?'
+const selectEntry = 'SELECT * FROM ' + config.databaseKeyspace + '.entries WHERE mapid = ? and key = ?'
+const selectValue = 'SELECT data, value, etag FROM ' + config.databaseKeyspace + '.values WHERE mapid = ? and key = ?'
 
 //deletes
-const deleteMapNamespace = 'DELETE FROM ' + config.databaseKeyspace + '.namespaces WHERE namespace = ? and mapuuid = ?'
-const deleteMap = 'DELETE FROM ' + config.databaseKeyspace + '.maps WHERE mapuuid = ?'
-const deleteMapIndex = 'DELETE FROM ' + config.databaseKeyspace + '.indexes WHERE name =?'
-const deleteMapEntry = 'DELETE FROM ' + config.databaseKeyspace + '.entries WHERE mapuuid = ? and key = ?'
-const deleteMapValue = 'DELETE FROM ' + config.databaseKeyspace + '.values WHERE mapuuid = ? and key = ?'
+const deleteMapNamespace = 'DELETE FROM ' + config.databaseKeyspace + '.namespaces WHERE namespace = ? and mapid = ?'
+const deleteMap = 'DELETE FROM ' + config.databaseKeyspace + '.maps WHERE mapid = ?'
+const deleteMapIndex = 'DELETE FROM ' + config.databaseKeyspace + '.indexes WHERE name = ? and mapid = ?'
+const deleteMapEntry = 'DELETE FROM ' + config.databaseKeyspace + '.entries WHERE mapid = ? and key = ?'
+const deleteMapValue = 'DELETE FROM ' + config.databaseKeyspace + '.values WHERE mapid = ? and key = ?'
 
 
-function createMapThen(mapuuid, map, callback) {
+function createMapThen(mapId, map, callback) {
   var etag = uuidgen.v4()
   var namespace = map.namespace
-  map.name = map.name ? map.name : '' // default map name to empty string if it doesn't exist
+  map.name = map.name ? map.name : null // default map name to empty string if it doesn't exist
   const batchQueries = [
-    {query: insertMap, params: [cassandra.types.Uuid.fromString(mapuuid), JSON.stringify(map), etag]},
+    {query: insertMap, params: [cassandra.types.Uuid.fromString(mapId), JSON.stringify(map), etag]},
   ]
   if (map && map.name && !namespace)
-    batchQueries.push({query: insertIndex, params: [map.name, cassandra.types.Uuid.fromString(mapuuid)]})
+    batchQueries.push({query: insertIndex, params: [map.name, cassandra.types.Uuid.fromString(mapId)]})
   if (namespace)
-    batchQueries.push({query: insertNamespace, params: [namespace, cassandra.types.Uuid.fromString(mapuuid), map.name]})
+    batchQueries.push({query: insertNamespace, params: [namespace, cassandra.types.Uuid.fromString(mapId), map.name]})
     if (map.name !== '') // add index entry for namespace:mapname if mapname wasn't empty
       var nsName = namespace + SEPARATOR + map.name
-      batchQueries.push({query: insertIndex, params: [nsName, cassandra.types.Uuid.fromString(mapuuid)]})
+      batchQueries.push({query: insertIndex, params: [nsName, cassandra.types.Uuid.fromString(mapId)]})
   client.batch(batchQueries, {prepare: true}, function (err, result) {
-    if (err)
+    if (err) {
       callback(err)
+    }
     else {
       //console.log('Added map with namespace=' + namespace + ', uuid=' + uuid + ', map=' + JSON.stringify(map)+', etag='+etag)
       callback(null, etag) // inserts do not generate result rows
@@ -85,24 +87,134 @@ function createMapThen(mapuuid, map, callback) {
   })
 }
 
-
-function updateMapThen(mapuuid, patchedMap, callback) { // TODO: watch for change to name or namespace
+/**
+ * A bit confusing on the updating of a map due to possible name and/or namespace changes and
+ * separate maps,indexes,name tables that need to be updated.
+ *
+ *  ** An atomic batch statement is used so it all succeeds or all fails. ** //todo test this somehow
+ *
+ * Use cases handled:
+ *
+ * 1. Namespace change
+ *    a. name added
+ *    b. name removed
+ *    c. name changed
+ * 2. Name changes
+ *    a. namespace added
+ *    b. namespace removed
+ *    c. namespace unchanged
+ * 3. Name added
+ *    a. namespace added
+ *    b. namespace removed
+ *    c. namespace unchanged
+ * 4. Name removed
+ *    a. namespace added
+ *    b. namespace removed
+ *    c. namespace unchanged
+ *
+ */
+function updateMapThen(mapId, patchedMap, callback) {
   var etag = uuidgen.v4()
-  client.execute(insertMap, [cassandra.types.Uuid.fromString(mapuuid), JSON.stringify(patchedMap), etag], {prepare: true}, function (err, result) {
-    if (err) {
+  const batchQueries = [
+    {query: insertMap, params: [cassandra.types.Uuid.fromString(mapId), JSON.stringify(patchedMap), etag]},
+  ]
+  withMapDo(mapId, function (err, map, etag) {
+    if (err)
       callback(err)
-    }
+    else if (map == null)
+      callback(404)
     else {
-      callback(null, etag) // inserts do not generate result rows
+      // handle namespace changes
+      if (patchedMap.namespace && map.namespace && patchedMap.namespace !== map.namespace) { // TODO double check all cases are covered
+        // if name is new to the map, insert the name index
+        if (patchedMap.name && !map.name) {
+          batchQueries.push({query: insertIndex, params: [getMapName(patchedMap.namespace, patchedMap.name), mapId]})
+        }
+        // if name is being removed from the map, remove the name index
+        if (!patchedMap.name && map.name) {
+          batchQueries.push({query: deleteMapIndex, params: [getMapName(map.namespace, map.name), mapId]})
+        }
+        // if name is existed and being changed, we need to update the index
+        if (patchedMap.name && map.name && patchedMap.name !== map.name) {
+          batchQueries.push({query: deleteMapIndex, params: [getMapName(map.namespace, map.name), mapId]})
+          batchQueries.push({query: insertIndex, params: [getMapName(patchedMap.namespace, patchedMap.name), mapId]})
+        }
+        // always update the namespace table
+        batchQueries.push({query: deleteMapNamespace, params: [map.namespace, mapId]})
+        batchQueries.push({query: insertNamespace, params: [patchedMap.namespace, mapId, patchedMap.name ? patchedMap.name : null]})
+      }
+      // handle name changes
+      else if (patchedMap.name && map.name && patchedMap.name !== map.name) {
+        // if namespace is new to the map, insert the index and namespace table, remove the old index w/o namespace
+        if (patchedMap.namespace && !map.namespace) {
+          batchQueries.push({query: insertIndex, params: [getMapName(patchedMap.namespace, patchedMap.name), mapId]})
+          batchQueries.push({query: insertNamespace, params: [patchedMap.namespace, mapId, patchedMap.namespace]})
+          batchQueries.push({query: deleteMapIndex, params: [map.name, mapId]})
+        }
+        // if namespace is being removed from the map, remove from namespace table, index, and write index w/o namespace
+        else if (!patchedMap.namespace && map.namespace) {
+          batchQueries.push({query: deleteMapNamespace, params: [map.namespace, mapId]})
+          batchQueries.push({query: deleteMapIndex, params: [getMapName(map.namespace, map.name), mapId]})
+          batchQueries.push({query: insertIndex, params: [patchedMap.name, mapId]})
+        }
+        // namespace isn't touched
+        else {
+          batchQueries.push({query: deleteMapIndex, params: [map.name, mapId]})
+          batchQueries.push({query: insertIndex, params: [patchedMap.name, mapId]})
+        }
+      }
+      // handle name removals
+      else if (!patchedMap.name && map.name) {
+        // if namespace is new to the map, insert the index and namespace table
+        if (patchedMap.namespace && !map.namespace) {
+          batchQueries.push({query: insertNamespace, params: [patchedMap.namespace, mapId, '']})
+          batchQueries.push({query: deleteMapIndex, params: [map.name, mapId]})
+        }
+        // if namespace is being removed from the map, remove from namespace table, index, and write index w/o namespace
+        else if (!patchedMap.namespace && map.namespace) {
+          batchQueries.push({query: deleteMapNamespace, params: [map.namespace, mapId]})
+          batchQueries.push({query: deleteMapIndex, params: [getMapName(map.namespace, map.name), mapId]})
+        }
+        // namespace is unchanged, remove the index as we no longer have a map name and update namespace table too
+        else {
+          batchQueries.push({query: deleteMapIndex, params: [getMapName(map.namespace, map.name), mapId]})
+          batchQueries.push({query: insertNamespace, params: [patchedMap.namespace, mapId, '']})
+        }
+      }
+      // handle name addition
+      else if (patchedMap.name && !map.name) {
+        // if namespace is new to the map, insert the index and namespace table
+        if (patchedMap.namespace && !map.namespace) {
+          batchQueries.push({query: insertNamespace, params: [patchedMap.namespace, mapId, patchedMap.name]})
+          batchQueries.push({query: insertIndex, params: [getMapName(patchedMap.namespace, patchedMap.name), mapId]})
+        }
+        // if namespace is being removed from the map, remove from namespace table, there should be no indexes to remove
+        else if (!patchedMap.namespace && map.namespace) {
+          batchQueries.push({query: deleteMapNamespace, params: [map.namespace, mapId]})
+        }
+        // namespace is unchanged, remove the index as we no longer have a map name and update namespace table too
+        else if (patchedMap.namespace && map.namespace) {
+          batchQueries.push({query: insertIndex, params: [getMapName(patchedMap.namespace, patchedMap.name), mapId]})
+          batchQueries.push({query: insertNamespace, params: [patchedMap.namespace, mapId, patchedMap.name]})
+        }
+      }
     }
 
+    client.batch(batchQueries, {prepare: true}, function (err, result) {
+      if (err) {
+        callback(err)
+      }
+      else {
+        callback(null, etag) // inserts do not generate result rows
+      }
+    })
   })
 }
 
 
-function createEntryThen(mapuuid, key, entry, callback) {
+function createEntryThen(mapId, key, entry, callback) {
   var etag = uuidgen.v4()
-  client.execute(insertMapEntry, [cassandra.types.Uuid.fromString(mapuuid), key, etag], {prepare: true}, function (err, result) {
+  client.execute(insertMapEntry, [cassandra.types.Uuid.fromString(mapId), key, JSON.stringify(entry), etag], {prepare: true}, function (err, result) {
     if (err)
       callback(err)
     else {
@@ -112,16 +224,16 @@ function createEntryThen(mapuuid, key, entry, callback) {
   })
 }
 
-function upsertValueThen(mapuuid, key, metadata, value, callback) {
-  createMapValue(mapuuid, key, metadata, value, callback)
+function upsertValueThen(mapId, key, data, value, callback) {
+  createMapValue(mapId, key, data, value, callback)
 }
 
-function createMapValue(mapuuid, key, contentType, value, callback) {
+function createMapValue(mapId, key, data, value, callback) {
   if (!(value instanceof Buffer)) {
     callback(true, {error: 'Value must be a Buffer'})
   }
   var etag = uuidgen.v4()
-  client.execute(insertMapValue, [cassandra.types.Uuid.fromString(mapuuid), key, JSON.stringify(contentType), value, etag], {prepare: true}, function (err, result) {
+  client.execute(insertMapValue, [cassandra.types.Uuid.fromString(mapId), key, JSON.stringify(data), value, etag], {prepare: true}, function (err, result) {
     if (err)
       callback(err)
     else {
@@ -132,8 +244,8 @@ function createMapValue(mapuuid, key, contentType, value, callback) {
 }
 
 
-function withMapDo(mapuuid, callback) {
-  client.execute(selectMap, [cassandra.types.Uuid.fromString(mapuuid)], {prepare: true}, function (err, result) {
+function withMapDo(mapId, callback) {
+  client.execute(selectMap, [cassandra.types.Uuid.fromString(mapId)], {prepare: true}, function (err, result) {
     if (err)
       callback(err)
     else
@@ -142,87 +254,88 @@ function withMapDo(mapuuid, callback) {
         map = result.rows[0].get('map')
         etag = result.rows[0].get('etag')
       }
-      callback(null, map, etag)
+      callback(null, JSON.parse(map), etag)
 
   })
 }
 
 function withMapByNameDo(namespace, name, callback) {
-  getMapUuid(namespace, name, function(err, mapuuid){
+  getMapId(namespace, name, function(err, mapId){
     if (err)
       callback(err)
     else{
-     withMapDo(mapuuid, function (err, map, etag) {
+     withMapDo(mapId, function (err, map, etag) {
         if (err)
           callback(err)
         else if (map == null)
           callback(404)
         else
-          callback(null, map, mapuuid, etag)
+          callback(null, map, mapId, etag)
       })
     }
   })
 }
 
 
-function getMapUuid(namespace, name, callback) {
+function getMapId(namespace, name, callback) {
   var indexName = getMapName(namespace,name)
-  client.execute(selectMapUuidFromName, [indexName], {prepare: true}, function (err, result) {
+  client.execute(selectmapIdFromName, [indexName], {prepare: true}, function (err, result) {
     if (err)
       callback(err)
     else if ( result.rows.length > 1)
       callback(true, {error:'More than one UUID mapped to map name'})
     else
-      callback(null, result.rows.length > 0 ? result.rows[0].get('mapuuid').toString() : null)
+      callback(null, result.rows.length > 0 ? result.rows[0].get('mapid').toString() : null)
   })
 }
 
 
-function withEntriesDo(mapuuid, callback) {
-  client.execute(selectEntries, [cassandra.types.Uuid.fromString(mapuuid)], {prepare: true}, function (err, result) {
+function withEntriesDo(mapId, callback) {
+  client.execute(selectEntries, [cassandra.types.Uuid.fromString(mapId)], {prepare: true}, function (err, result) {
     if (err)
       callback(err)
     else
-      callback(null, result.rows.length > 0 ? result.rows : null) // TODO: change fields to be named mapid, key, data
+      callback(null, result.rows.length > 0 ? result.rows : null)
   })
 }
 
 
-function getMapEntry(mapuuid, key, callback) {
-  client.execute(selectEntry, [cassandra.types.Uuid.fromString(mapuuid), key], {prepare: true}, function (err, result) {
+function getMapEntry(mapId, key, callback) {
+  client.execute(selectEntry, [cassandra.types.Uuid.fromString(mapId), key], {prepare: true}, function (err, result) {
     if (err)
       callback(err)
     else
-      var key, etag
+      var key, etag, data
       if(result.rows.length > 0){
         key = result.rows[0].get('key')
+        data = result.rows[0].get('data') ? JSON.parse(result.rows[0].get('data')) : null
         etag = result.rows[0].get('etag')
       }
-      callback(null, key, etag)
+      callback(null, key, data, etag)
   })
 }
 
 
-function withValueDo(mapuuid, key, callback) {
-  client.execute(selectValue, [cassandra.types.Uuid.fromString(mapuuid), key], {prepare: true}, function (err, result) {
+function withValueDo(mapId, key, callback) {
+  client.execute(selectValue, [cassandra.types.Uuid.fromString(mapId), key], {prepare: true}, function (err, result) {
     if (err)
       callback(err)
     else
-      var value, type, etag
+      var value, data, etag
       if(result.rows.length > 0){
         value = result.rows[0].get('value')
-        type = result.rows[0].get('type')
+        data = result.rows[0].get('data')
         etag = result.rows[0].get('etag')
       }
-      callback(null, JSON.parse(type), value, etag)
+      callback(null, JSON.parse(data), value, etag)
   })
 }
 
 
-function removeMapEntry(mapuuid, key, callback) {
-  client.execute(deleteMapEntry, [mapuuid, key], {prepare: true}, function (err, result) {
+function removeMapEntry(mapId, key, callback) {
+  client.execute(deleteMapEntry, [cassandra.types.Uuid.fromString(mapId), key], {prepare: true}, function (err, result) {
     if (err)
-      console.error('Error removing entry for mapuuid= ' + mapuuid + ', key=' + key)
+      console.error('Error removing entry for mapid= ' + mapId + ', key=' + key)
     else
       callback(null, result)
   })
@@ -230,10 +343,10 @@ function removeMapEntry(mapuuid, key, callback) {
 }
 
 
-function removeMapValue(mapuuid, key, callback) {
-  client.execute(deleteMapValue, [mapuuid, key], {prepare: true}, function (err, result) {
+function removeMapValue(mapId, key, callback) {
+  client.execute(deleteMapValue, [cassandra.types.Uuid.fromString(mapId), key], {prepare: true}, function (err, result) {
     if (err)
-      console.error('Error removing value for mapuuid= ' + mapuuid + ', key=' + key)
+      console.error('Error removing value for mapid= ' + mapId + ', key=' + key)
     else
       callback(null)
   })
@@ -241,12 +354,14 @@ function removeMapValue(mapuuid, key, callback) {
 }
 
 
-function removeMapIndex(namespace, name, callback) {
+function removeMapIndex(namespace, name, mapId, callback) {
   if (namespace && namespace !== '')
     name = namespace + SEPARATOR + name
-  client.execute(deleteMapIndex, [name], {prepare: true}, function (err, result) {
-    if (err)
+  client.execute(deleteMapIndex, [name, cassandra.types.Uuid.fromString(mapId)], {prepare: true}, function (err, result) {
+    if (err) {
+      console.log(err)
       console.error('Error removing map index for namespace=' + namespace + ', name= ' + name)
+    }
     else
       callback(null)
   })
@@ -261,8 +376,8 @@ function getMapsFromNamespace(namespace, callback) {
   })
 }
 
-function removeMapFromNamespace(namespace, mapuuid, callback) {
-  client.execute(deleteMapNamespace, [namespace, mapuuid], {prepare: true}, function (err, result) {
+function removeMapFromNamespace(namespace, mapId, callback) {
+  client.execute(deleteMapNamespace, [namespace, cassandra.types.Uuid.fromString(mapId)], {prepare: true}, function (err, result) {
     if (err)
       console.error('Error removing map from  namespace=' + namespace + ', map name= ' + name)
     else
@@ -270,41 +385,49 @@ function removeMapFromNamespace(namespace, mapuuid, callback) {
   })
 }
 
-function deleteMapThen(mapuuid, callback) {
-  client.eachRow(selectEntries, [mapuuid], function (n, row) {
+/**
+ * 1. Delete all entries and values for the given map
+ * 2. Load map to obtain its namespace
+ * 3. Delete the map
+ * 4. Delete the map indexes
+ * 5. Remove the map from the namespace
+ */
+function deleteMapThen(mapId, callback) {
+  client.eachRow(selectEntries, [mapId], function (n, row) {
       //the callback will be invoked per each row as soon as they are received
-      removeMapEntry(row.get('mapuuid'), row.get('key'), function (err, result) {
-      })
-      removeMapValue(row.get('mapuuid'), row.get('key'), function (err, result) {
-      })
+      removeMapEntry(row.get('mapid').toString(), row.get('key'), function (err, result) {})
+      removeMapValue(row.get('mapid').toString(), row.get('key'), function (err, result) {})
     },
     function (err) {
       if (err)
         callback(err)
       else {
-        withMapDo(mapuuid, function (err, map, etag) {
+        var id = mapId;
+        withMapDo(mapId, function (err, map, etag) {
           if (err)
             callback(err)
-          else { // TODO: worry about order for the failure case
+          else {
             var oMap = map ? JSON.parse(map) : null
             var name = oMap ? oMap.name : null
             var namespace = oMap ? oMap.namespace : null
-            if (name) {
-              removeMapIndex(null, name, function (err, result) {
-              })
-              removeMapIndex(namespace, name, function (err, result) {
-              })
-            }
-            client.execute(deleteMap, [mapuuid], {prepare: true}, function (err, deleteResult) {
+
+            client.execute(deleteMap, [mapId], {prepare: true}, function (err, deleteResult) {
               if (err)
-                console.error('Error removing map index for mapuuid= ' + mapuuid)
-              else
-                removeMapFromNamespace(namespace, mapuuid, function(err){
+                console.error('Error removing map index for mapid= ' + mapId)
+              else {
+                // remove indexes
+                if (name)
+                  removeMapIndex(null, name, mapId, function (err, result) {})
+                if (namespace)
+                  removeMapIndex(namespace, name, mapId, function (err, result) {})
+                // remove association to namespace
+                removeMapFromNamespace(namespace, mapId, function (err) {
                   if (err)
                     callback(err)
                   else
                     callback(null)
                 })
+              }
             })
           }
         })
@@ -321,11 +444,11 @@ function getMapName(namespace, name){
 function init(callback) {
 
   var keyspace = "CREATE KEYSPACE IF NOT EXISTS " + config.databaseKeyspace + " WITH replication = {'class': 'NetworkTopologyStrategy', " + config.databaseReplication + "}  AND durable_writes = true"
-  var namespaces = "CREATE TABLE IF NOT EXISTS " + config.databaseKeyspace + ".namespaces ( namespace text, mapuuid uuid, mapname text, PRIMARY KEY ((namespace), mapuuid ))"
-  var maps = "CREATE TABLE IF NOT EXISTS " + config.databaseKeyspace + ".maps ( mapuuid uuid, map text, etag text, PRIMARY KEY (( mapuuid )))"
-  var names = "CREATE TABLE IF NOT EXISTS " + config.databaseKeyspace + ".indexes ( name text, mapuuid uuid, PRIMARY KEY ((name), mapuuid))"
-  var entries = "CREATE TABLE IF NOT EXISTS " + config.databaseKeyspace + ".entries (mapuuid uuid, key text, etag text, PRIMARY KEY ((mapuuid), key)) WITH CLUSTERING ORDER BY (key ASC)"
-  var values = "CREATE TABLE IF NOT EXISTS " + config.databaseKeyspace + ".values (mapuuid uuid, key text, type text, value blob, etag text, PRIMARY KEY ((mapuuid, key)))"
+  var namespaces = "CREATE TABLE IF NOT EXISTS " + config.databaseKeyspace + ".namespaces ( namespace text, mapid uuid, mapname text, PRIMARY KEY ((namespace), mapid ))"
+  var maps = "CREATE TABLE IF NOT EXISTS " + config.databaseKeyspace + ".maps ( mapid uuid, map text, etag text, PRIMARY KEY (( mapid )))"
+  var names = "CREATE TABLE IF NOT EXISTS " + config.databaseKeyspace + ".indexes ( name text, mapid uuid, PRIMARY KEY ((name), mapid))"
+  var entries = "CREATE TABLE IF NOT EXISTS " + config.databaseKeyspace + ".entries (mapid uuid, key text, data text, etag text, PRIMARY KEY ((mapid), key)) WITH CLUSTERING ORDER BY (key ASC)"
+  var values = "CREATE TABLE IF NOT EXISTS " + config.databaseKeyspace + ".values (mapid uuid, key text, data text, value blob, etag text, PRIMARY KEY ((mapid, key)))"
 
   client.execute(keyspace, {}, function (err, result) {
     if (err)
@@ -397,13 +520,14 @@ function getCassandraCL(stringConsistencyLevel) {
   }
 }
 
-exports.createMap = createMap
-exports.updateMap = updateMap
-exports.createMapEntry = createMapEntry
+exports.createMapThen = createMapThen
+exports.updateMapThen = updateMapThen
+exports.createEntryThen = createEntryThen
 exports.createMapValue = createMapValue
+exports.upsertValueThen = upsertValueThen
 exports.withMapDo = withMapDo
 exports.withMapByNameDo = withMapByNameDo
-exports.getMapUuid = getMapUuid
+exports.getMapId = getMapId
 exports.withEntriesDo = withEntriesDo
 exports.getMapEntry = getMapEntry
 exports.withValueDo = withValueDo
