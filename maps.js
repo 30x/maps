@@ -253,45 +253,40 @@ function requestHandler(req, res) {
         getValue(req, res, mapID, key)
       } else
         lib.notFound(req, res)
-    } else if (req_url.pathname.lastIndexOf(VALUES, 0) > -1) { /* url of form /VALUES-xxxxxx:{key} */
+    } else if (req_url.pathname.lastIndexOf(VALUES, 0) > -1) { /* url of form /VALUES-mapID:{key} */
       let splitPath = req_url.pathname.split('/')
       let valuesID = splitPath[1].substring(VALUES.length-1)
-      if (splitPath.length == 2)
-        if (req.method == 'PUT')
-          getNameParts(req, res, valuesID, function(mapID, key) {
+      getNameParts(req, res, valuesID, function(mapID, key) {
+        if (splitPath.length == 2)
+          if (req.method == 'PUT')
             lib.getServerPostBuffer(req, res, function(req, res, value) {
               createValue(req, res, mapID, key, value)
             })
-          })
-        else if (req.method == 'GET')
-          getNameParts(req, res, valuesID, function(mapID, key) {
+          else if (req.method == 'GET')
             getValue(req, res, mapID, key)
-          })          
-        else 
-          lib.methodNotAllowed(req, res, ['GET', 'PUT'])
-      else  
-        lib.notFound(req, res)      
-    } else if (req_url.pathname.lastIndexOf('/maps;', 0) > -1) {
+          else 
+            lib.methodNotAllowed(req, res, ['GET', 'PUT'])
+        else  
+          lib.notFound(req, res)      
+      })
+    } else if (req_url.pathname.lastIndexOf('/maps;', 0) > -1) { /* url of form /maps;ns:name?????? */
       let splitPath = req_url.pathname.split('/')
       let mapFullName = splitPath[1].substring('maps;'.length);
-      if (splitPath.length == 2)
-        if (req.method == 'GET') {
-          getNameParts(req, res, mapFullName, function(ns, name) {
+      getNameParts(req, res, mapFullName, function(ns, name) {
+        if (splitPath.length == 2)
+          if (req.method == 'GET')
             getMapByName(req, res, ns, name);         
-          })
-        } else 
-          lib.methodNotAllowed(req, res, ['GET'])
-      else if (splitPath.length == 3 && splitPath[2] == 'entries') { /* url of form /maps;ns:name/entries */
-        getNameParts(req, res, mapFullName, function(ns, name) {
+          else 
+            lib.methodNotAllowed(req, res, ['GET'])
+        else if (splitPath.length == 3 && splitPath[2] == 'entries') /* url of form /maps;ns:name/entries */
           ps.withMapByNameDo(req, res, ns, name, function(map, mapID, etag) {
             entriesRequest(mapID)
           })
-        })
-      }
-      else if (splitPath.length == 4 && splitPath[2].lastIndexOf('entries',0) > -1 && splitPath[3] == 'value')  /* url of form /maps;ns:name/entries;{key}/value */
-        lib.internalError(res, 'not yet implemented')
-      else
-        lib.notFound(req, res)
+        else if (splitPath.length == 4 && splitPath[2].lastIndexOf('entries',0) > -1 && splitPath[3] == 'value')  /* url of form /maps;ns:name/entries;{key}/value */
+          lib.internalError(res, 'not yet implemented')
+        else
+          lib.notFound(req, res)
+      })
     } else 
       lib.notFound(req, res)
   }
