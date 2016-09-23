@@ -10,18 +10,21 @@ var ENTRIES = '/ZW50-'
 var VALUES  = '/dmFs-'
 
 function verifyMapName(req, res, user, map, callback) {
-  if (!(map.name === undefined && map.namespace === undefined)) 
+  if (!(map.name === undefined && map.namespace === undefined)) // named map
     if (map.name === undefined || map.namespace === undefined)
       lib.badRequest(res, `must provide both name and namespace or neither. name: ${map.name} namespace: ${map.namespace}`)
-    else
+    else // both parts of the name present
       ps.db.withMapByNameDo(map.namespace, map.name, function(err, map) {
         if (err != 404) 
           if (err)
             lib.badRequest(res, `unable to check for map name collision. err: ${err}`)
           else
             lib.duplicate(res, `duplicate map name ${map.namespace}:${map.name}`)
+        else // not already there
+          callback()
       })
-  callback()  
+  else
+    callback()  
 }
 
 function verifyMap(req, map, user, callback) {
@@ -117,7 +120,7 @@ function createEntry(req, res, mapID, entry) {
   }  
 }
 
-function createValue(req, res, mapID, key, value) {
+function upsertValue(req, res, mapID, key, value) {
   var user = lib.getUser(req);
   if (user == null)
     lib.unauthorized(req, res)
@@ -191,6 +194,15 @@ function updateMap(req, res, id, patch) {
   })
 }
 
+function getEntry(req, res, mapID, key) {
+  lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'read', function(map) {
+    ps.withEntryDo(req, res, mapID, key, function (entry, etag) {
+      addCalculatedEntryProperties(req, entry, mapID, key)
+      lib.found(req, res, entry, etag, entry.self);
+    });
+  });
+}
+
 function getEntries(req, res, mapID) {
   lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'read', function(map) {
     ps.withEntriesDo(req, res, mapID, function (entries) {
@@ -210,7 +222,7 @@ function getNameParts(req, res, mapFullName, callback) {
     let [part1, part2] = splitID
     callback(part1, part2)
   } else
-    lib.badRequest(res, `map full name must be composed of two simple names separated by a ":" (${mapFullName})`)
+    lib.badRequest(res, `name must be composed of two simple names separated by a ":" (${mapFullName})`)
 }
 
 function requestHandler(req, res) {
@@ -260,7 +272,7 @@ function requestHandler(req, res) {
         if (splitPath.length == 2)
           if (req.method == 'PUT')
             lib.getServerPostBuffer(req, res, function(req, res, value) {
-              createValue(req, res, mapID, key, value)
+              upsertValue(req, res, mapID, key, value)
             })
           else if (req.method == 'GET')
             getValue(req, res, mapID, key)
@@ -271,7 +283,7 @@ function requestHandler(req, res) {
       })
     } else if (req_url.pathname.lastIndexOf('/maps;', 0) > -1) { /* url of form /maps;ns:name?????? */
       let splitPath = req_url.pathname.split('/')
-      let mapFullName = splitPath[1].substring('maps;'.length);
+      let mapFullName = splitPath[1].substring('maps;'.length)
       getNameParts(req, res, mapFullName, function(ns, name) {
         if (splitPath.length == 2)
           if (req.method == 'GET')
@@ -282,9 +294,25 @@ function requestHandler(req, res) {
           ps.withMapByNameDo(req, res, ns, name, function(map, mapID, etag) {
             entriesRequest(mapID)
           })
-        else if (splitPath.length == 4 && splitPath[2].lastIndexOf('entries',0) > -1 && splitPath[3] == 'value')  /* url of form /maps;ns:name/entries;{key}/value */
-          lib.internalError(res, 'not yet implemented')
-        else
+        else if (splitPath.length == 3 && splitPath[2].lastIndexOf('entries;',0) > -1) /* url of form /maps;ns:name/entries;{key} */
+          ps.withMapByNameDo(req, res, ns, name, function(map, mapID, etag) {
+            getEntry(req, res, mapID, splitPath[2].substring('entries;'.length))
+          })
+        else if (splitPath.length == 4 && splitPath[2].lastIndexOf('entries;',0) > -1 && splitPath[3] == 'value') { /* url of form /maps;ns:name/entries;{key}/value */
+          let key = splitPath[2].substring('entries;'.length)
+          if (req.method == 'PUT')
+            ps.withMapByNameDo(req, res, ns, name, function(map, mapID, etag) {
+              lib.getServerPostBuffer(req, res, function(req, res, value) {
+                upsertValue(req, res, mapID, key, value)
+              })
+            })
+          else if (req.method == 'GET')
+            ps.withMapByNameDo(req, res, ns, name, function(map, mapID, etag) {
+              getValue(req, res, mapID, key)
+            })
+          else 
+            lib.methodNotAllowed(req, res, ['GET', 'PUT'])
+        } else
           lib.notFound(req, res)
       })
     } else 

@@ -94,7 +94,8 @@ def main():
         print 'failed to create entry %s %s %s' % (entries_url, r.status_code, r.text)
         return
 
-    r = requests.put(value_ref, headers=headers, data='first entry value')
+    headers = {'Content-Type': 'text/plain','Authorization': 'Bearer %s' % TOKEN1}
+    r = requests.put(value_ref, headers=headers, data='Humpty Dumpty Sat on a wall')
     if r.status_code == 201 or r.status_code == 200:
         loc = r.headers['Location' if r.status_code == 201 else 'Content-Location']
         print 'correctly created value: %s etag: %s' % (loc, r.headers['etag'])
@@ -109,6 +110,7 @@ def main():
         'test-data': True
         }
 
+    headers = {'Content-Type': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
     r = requests.post(entries_url, headers=headers, json=entry)
     if r.status_code == 201:
         entry_url2 = urljoin(BASE_URL, r.headers['Location'])
@@ -179,7 +181,7 @@ def main():
     headers = {'Content-Type': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
     r = requests.post(maps_url, headers=headers, json=map)
     if r.status_code == 409:
-        print 'correctly refused to created map with duplicate name %s' % (r.text)
+        print 'correctly refused to create map with duplicate name %s' % (r.text)
     else:
         print 'failed to reject map with duplicate name %s %s %s' % (maps_url, r.status_code, r.text)
         return
@@ -192,9 +194,27 @@ def main():
         if 'contents' in entries and isinstance(entries['contents'], list):
             print 'correctly retrieved map entries by name: %s' % (r.headers['Content-Location'])
         else:
-            print 'wrong return type for map entries by name: %s' % (r.headers['Content-Location'])
+            print 'wrong return type for map entries by name: %s type: %s' % (r.headers['Content-Location'], type(entries['contents']))
     else:
-        print 'failed to retrieve map entries by name %s %s %s' % (name_url, r.status_code, r.text)
+        print 'failed to retrieve map entries by name %s %s %s' % (entries_url, r.status_code, r.text)
+        return
+
+    entry_url = urljoin(BASE_URL, '/maps;acme:nursery-rhymes/entries;HumptyDumpty')
+    headers = {'Accept': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
+    r = requests.get(entry_url, headers=headers, json=map)
+    if r.status_code == 200:
+        print 'correctly retrieved map entry by name from map by name: %s returned: %s' % (entry_url, r.headers['Content-Location'])
+    else:
+        print 'failed to retrieve map entry by name from map by name %s %s %s' % (entry_url, r.status_code, r.text)
+        return
+
+    value_url = urljoin(BASE_URL, '/maps;acme:nursery-rhymes/entries;HumptyDumpty/value')
+    headers = {'Authorization': 'Bearer %s' % TOKEN1}
+    r = requests.get(value_url, headers=headers, json=map)
+    if r.status_code == 200:
+        print 'correctly retrieved value from map entry by name: %s returned: %s at: %s' % (value_url, r.headers['Content-Location'], r.text)
+    else:
+        print 'failed to retrieve value from map entry by name %s %s %s' % (value_url, r.status_code, r.text)
         return
 
     map = {

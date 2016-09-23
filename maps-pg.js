@@ -66,47 +66,51 @@ function withMapDo(id, callback) {
 function withValueDo(mapID, key, callback) {
   var query = `SELECT etag, metadata, value FROM values WHERE mapid = '${mapID}' AND key = '${key}'`
   pool.query(query, function (err, pg_res) {
-    if (err) {
-      callback(err);
-    }
-    else {
-      if (pg_res.rowCount === 0) { 
-        callback(404);
-      }
+    if (err) 
+      callback(err)
+    else
+      if (pg_res.rowCount === 0)
+        callback(404)
       else {
         var row = pg_res.rows[0];
         callback(null, row.metadata, row.value, row.etag);
       }
-    }
-  });
+  })
 }
 
 function withMapByNameDo(ns, name, callback) {
   pool.query(`SELECT id, etag, data FROM maps WHERE data @> '{"namespace": "${ns}", "name": "${name}"}'`, function (err, pg_res) {
-    if (err) {
-      callback(err);
-    }
+    if (err) 
+      callback(err)
+    else if (pg_res.rowCount === 0) 
+      callback(404)
     else {
-      if (pg_res.rowCount === 0) { 
-        callback(404);
-      }
-      else {
-        var row = pg_res.rows[0];
-        callback(null, row.data, row.id, row.etag);
-      }
+      var row = pg_res.rows[0];
+      callback(null, row.data, row.id, row.etag);
     }
-  });
+  })
 }
 
 function withEntriesDo(mapid, callback) {
   pool.query(`SELECT * FROM entries WHERE mapid = '${mapid}'`, function (err, pg_res) {
-    if (err) {
-      callback(err);
-    }
+    if (err)
+      callback(err)
+    else
+      callback(null, pg_res.rows)
+  })
+}
+
+function withEntryDo(mapid, key, callback) {
+  pool.query(`SELECT * FROM entries WHERE mapid = '${mapid}' and key = '${key}'`, function (err, pg_res) {
+    if (err) 
+      callback(err)
+    else if (pg_res.rowCount === 0)  
+      callback(404)
     else {
-      callback(null, pg_res.rows);
+      var row = pg_res.rows[0]
+      callback(null, pg_res.rows, pg_res.etag)
     }
-  });
+  })
 }
 
 function deleteMapThen(id, callback) {
@@ -178,6 +182,7 @@ exports.withMapDo = withMapDo
 exports.createEntryThen = createEntryThen
 exports.upsertValueThen = upsertValueThen
 exports.withEntriesDo = withEntriesDo
+exports.withEntryDo = withEntryDo
 exports.withMapByNameDo = withMapByNameDo
 exports.withValueDo = withValueDo
 exports.init = init

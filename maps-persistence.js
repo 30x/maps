@@ -19,9 +19,9 @@ function withErrorHandling(req, res, callback) {
   }
 }
 
-function createMapThen(req, res, id, selfURL, map, callback) {
+function createMapThen(req, res, mapID, selfURL, map, callback) {
   lib.internalizeURLs(map, req.headers.host);
-  db.createMapThen(id, map, withErrorHandling(req, res, callback)) 
+  db.createMapThen(mapID, map, withErrorHandling(req, res, callback)) 
 }
 
 function createEntryThen(req, res, mapID, key, entry, callback) {
@@ -33,8 +33,12 @@ function upsertValueThen(req, res, mapID, key, value, callback) {
   db.upsertValueThen(mapID, key, {'Content-Type': req.headers['content-type']}, value, withErrorHandling(req, res, callback));
 }
 
-function withMapDo(req, res, id, callback) {
-  db.withMapDo(id, withErrorHandling(req, res, callback));
+function withMapDo(req, res, mapID, callback) {
+  db.withMapDo(mapID, withErrorHandling(req, res, callback));
+}
+
+function withEntryDo(req, res, mapID, key, callback) {
+  db.withEntryDo(mapID, key, withErrorHandling(req, res, callback));
 }
 
 function withValueDo(req, res, mapID, key, callback) {
@@ -45,18 +49,18 @@ function withMapByNameDo(req, res, ns, name, callback) {
   db.withMapByNameDo(ns, name, withErrorHandling(req, res, callback));
 }
 
-function withEntriesDo(req, res, id, callback) {
-  db.withEntriesDo(id, withErrorHandling(req, res, callback));
+function withEntriesDo(req, res, mapID, callback) {
+  db.withEntriesDo(mapID, withErrorHandling(req, res, callback));
 }
 
-function deleteMapThen(req, res, id, callback) {
-  db.deleteMapThen(id, withErrorHandling(req, res, callback));
+function deleteMapThen(req, res, mapID, callback) {
+  db.deleteMapThen(mapID, withErrorHandling(req, res, callback));
 }
 
-function updateMapThen(req, res, id, map, patchedMap, callback) {
+function updateMapThen(req, res, mapID, map, patchedMap, callback) {
   lib.internalizeURLs(patchedMap, req.headers.host);
-  var key = lib.internalizeURL(id, req.headers.host);
-  db.updateMapThen(id, patchedMap, withErrorHandling(req, res, callback));
+  var key = lib.internalizeURL(mapID, req.headers.host);
+  db.updateMapThen(mapID, patchedMap, withErrorHandling(req, res, callback));
 }
 
 function executeQuery(query, callback) {
@@ -74,6 +78,7 @@ exports.withMapDo = withMapDo
 exports.createEntryThen = createEntryThen
 exports.upsertValueThen = upsertValueThen
 exports.withEntriesDo = withEntriesDo
+exports.withEntryDo=withEntryDo
 exports.withMapByNameDo = withMapByNameDo
 exports.withValueDo = withValueDo
 exports.db=db
