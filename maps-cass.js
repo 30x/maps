@@ -309,7 +309,7 @@ function withEntriesDo(mapId, callback) {
 }
 
 
-function getMapEntry(mapId, key, callback) {
+function withEntryDo(mapId, key, callback) {
   client.execute(selectEntry, [cassandra.types.Uuid.fromString(mapId), key], {prepare: true}, function (err, result) {
     if (err)
       callback(err)
@@ -538,7 +538,7 @@ exports.withMapDo = withMapDo
 exports.withMapByNameDo = withMapByNameDo
 exports.getMapId = getMapId
 exports.withEntriesDo = withEntriesDo
-exports.getMapEntry = getMapEntry
+exports.withEntryDo = withEntryDo
 exports.withValueDo = withValueDo
 exports.removeMapEntry = removeMapEntry
 exports.removeMapValue = removeMapValue
