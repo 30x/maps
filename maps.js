@@ -102,6 +102,7 @@ function makeValueURL(req, mapID, key) {
 function addCalculatedEntryProperties(req, entry, mapID, key) {
   entry.self = makeEntryURL(req, mapID, key)
   entry.value = makeValueURL(req, mapID, key)
+  entry.map = makeMapURL(req, mapID)
 }
 
 function createEntry(req, res, mapID, entry) {
