@@ -114,23 +114,39 @@ function withEntryDo(mapid, key, callback) {
 }
 
 function deleteMapThen(id, callback) {
-  var query = `DELETE FROM maps WHERE id = '${id}' RETURNING *`;
-  pool.query(query, function (err, pg_res) {
-    if (err) {
-      callback(err);
-    }
-    else {
-      if (pg_res.rowCount === 0) { 
-        callback(404);
-      }
-      else {
-        var row = pg_res.rows[0];
-        callback(null, row.data);
-      }
-    }
-  });
+  pool.connect(function(err, client, release) {
+    if (err)
+      lib.internalError(res, err);
+    else
+      client.query('BEGIN', function(err) {
+        if(err) {
+          client.query('ROLLBACK', release);
+          lib.internalError(res, err);
+        } else 
+          client.query(`DELETE FROM maps WHERE id = '${id}' RETURNING *`, function(err, pgResult) {
+            if(err) {
+              client.query('ROLLBACK', release);
+              lib.badRequest(res, err)
+            } else 
+              if (pgResult.rowCount === 0) {
+                client.query('COMMIT', release)
+                callback(404)
+              } else 
+                client.query(`DELETE from values WHERE mapid = '${id}'`, function(err) {
+                  if(err) {
+                    client.query('ROLLBACK', release);
+                    lib.internalError(res, err);
+                  } else {
+                    client.query('COMMIT', release);
+                    var row = pgResult.rows[0];
+                    callback(null, row.data, row.etag);
+                  }
+                })
+          })
+      })
+  })
 }
-
+  
 function updateMapThen(id, patchedMap, callback) {
   var etag = uuid()
   var query = `UPDATE maps SET (etag, data) = ('${etag}', '${JSON.stringify(patchedMap)}') WHERE id = '${id}'`;

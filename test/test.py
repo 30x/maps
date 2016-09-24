@@ -224,12 +224,15 @@ def main():
         print 'failed to retrieve value from map entry by name %s %s %s' % (value_url, r.status_code, r.text)
         return
 
-    map = {
-        'isA': 'Map',
-        'name': 'nursery-rhymes',
-        'namespace': 'acme',
-        'test-data': True
-        }
+    # DELETE map
+
+    headers = {'Authorization': 'Bearer %s' % TOKEN1}
+    r = requests.delete(map_url, headers=headers)
+    if r.status_code == 200:
+        print 'correctly deleted map %s etag: %s' % (r.headers['Content-Location'], r.headers['etag'])
+    else:
+        print 'failed to delete map %s %s %s' % (maps_url, r.status_code, r.text)
+        return
 
 if __name__ == '__main__':
     main()

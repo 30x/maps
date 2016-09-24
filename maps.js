@@ -178,8 +178,8 @@ function getMap(req, res, id) {
   lib.ifAllowedThen(req, res, null, '_resource', 'read', function() {
     ps.withMapDo(req, res, id, function(map, etag) {
       returnMap(req, res, map, id, etag)
-    });
-  });
+    })
+  })
 }
 
 function getMapByName(req, res, ns, name) {
@@ -192,10 +192,10 @@ function getMapByName(req, res, ns, name) {
 
 function deleteMap(req, res, id) {
   lib.ifAllowedThen(req, res, null, '_resource', 'delete', function() {
-    ps.deleteMapThen(req, res, id, function (map) {
-      lib.found(req, res, map);
-    });
-  });
+    ps.deleteMapThen(req, res, id, function (map, etag) {
+      lib.found(req, res, map, etag)
+    })
+  })
 }
 
 function updateMap(req, res, id, patch) {
@@ -222,7 +222,7 @@ function getEntry(req, res, mapID, key) {
   lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'read', function(map) {
     ps.withEntryDo(req, res, mapID, key, function (entry, valuedata, etag) {
       entry = addCalculatedEntryProperties(req, entry, valuedata, mapID, key)
-      lib.found(req, res, entry, etag, entry.self);
+      lib.found(req, res, entry, etag, entry.self)
     });
   });
 }
