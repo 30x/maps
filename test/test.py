@@ -155,7 +155,8 @@ def main():
     headers = {'Content-Type': 'application/merge-patch+json','Authorization': 'Bearer %s' % TOKEN1}
     r = requests.patch(map_url, headers=headers, json=patch)
     if r.status_code == 200:
-        print 'correctly patched map: %s etag: %s' % (map_url, r.headers['etag'])
+        patched_map = r.json()
+        print 'correctly patched map: %s etag: %s alias: %s' % (map_url, r.headers['etag'], r.json()['alias'])
     else:
         print 'failed to patch map %s %s %s' % (map_url, r.status_code, r.text)
         return

@@ -41,8 +41,10 @@ function makeMapURL(req, mapID) {
 function addCalculatedMapProperties(req, map, selfURL) {
   map.self = selfURL; 
   map.entries = `${selfURL}/entries`
-  map._permissions = `protocol://authority/permissions?${map.self}`;
-  map._permissionsHeirs = `protocol://authority/permissions-heirs?${map.self}`;
+  map._permissions = `protocol://authority/permissions?${map.self}`
+  map._permissionsHeirs = `protocol://authority/permissions-heirs?${map.self}`
+  if (map.name)
+    map.alias = `protocol://authority/maps;${map.namespace}:${map.name}`
 }
 
 function createMap(req, res, map) {
