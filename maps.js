@@ -190,6 +190,20 @@ function getMapByName(req, res, ns, name) {
   })
 }
 
+function deleteMapByName(req, res, ns, name) {
+  ps.withMapByNameDo(req, res, ns, name, function(map, id, etag) {
+    deleteMap(req, res, id)
+  })
+}
+
+function updateMapByName(req, res, ns, name, patch) {
+  ps.withMapByNameDo(req, res, ns, name, function(map, id, etag) {
+    lib.ifAllowedThen(req, res, makeMapURL(req, id), '_resource', 'update', function() {
+      securedUpdateMap(req, res, id, map, patch)
+    })
+  })
+}
+
 function deleteMap(req, res, id) {
   lib.ifAllowedThen(req, res, null, '_resource', 'delete', function() {
     ps.deleteMapThen(req, res, id, function (map, etag) {
@@ -199,23 +213,27 @@ function deleteMap(req, res, id) {
 }
 
 function updateMap(req, res, id, patch) {
-  lib.ifAllowedThen(req, res, makeMapURL(req, id), '_resource', 'update', function(map) {
+  lib.ifAllowedThen(req, res, makeMapURL(req, id), '_resource', 'update', function() {
     ps.withMapDo(req, res, id, function(map) {
-      var patchedMap = lib.mergePatch(map, patch)
-      function primUpdateMap() {
-        ps.updateMapThen(req, res, id, patchedMap, function (etag) {
-          addCalculatedMapProperties(req, patchedMap, makeMapURL(req, id)) 
-          lib.found(req, res, patchedMap, etag);
-        })    
-      }
-      verifyMapName(req, res, lib.getUser(req), map, function(namespace, name) {
-        if (namespace === undefined)
-          primUpdateMap()
-        else
-          lib.ifAllowedThen(req, res, `/namespaces;${namespace}`, '_resource', 'create', primCreateMap)        
-      })
+      securedUpdateMap(req, res, id, map, patch)
     })
   })
+}
+
+function securedUpdateMap(req, res, id, map, patch) {
+  var patchedMap = lib.mergePatch(map, patch)
+  function primUpdateMap() {
+    ps.updateMapThen(req, res, id, patchedMap, function (etag) {
+      addCalculatedMapProperties(req, patchedMap, makeMapURL(req, id)) 
+      lib.found(req, res, patchedMap, etag);
+    })    
+  }
+  verifyMapName(req, res, lib.getUser(req), map, function(namespace, name) {
+    if (namespace === undefined)
+      primUpdateMap()
+    else
+      lib.ifAllowedThen(req, res, `/namespaces;${namespace}`, '_resource', 'create', primUpdateMap)        
+  })  
 }
 
 function getEntry(req, res, mapID, key) {
@@ -317,9 +335,13 @@ function requestHandler(req, res) {
       getNameParts(req, res, mapFullName, function(ns, name) {
         if (splitPath.length == 2)
           if (req.method == 'GET')
-            getMapByName(req, res, ns, name);         
+            getMapByName(req, res, ns, name)       
+          else if (req.method == 'DELETE')
+            deleteMapByName(req, res, ns, name)      
+          else if (req.method == 'PATCH')
+            updateMapByName(req, res, ns, name)      
           else 
-            lib.methodNotAllowed(req, res, ['GET'])
+            lib.methodNotAllowed(req, res, ['GET', 'PATCH', 'DELETE'])
         else if (splitPath.length == 3 && splitPath[2] == 'entries') /* url of form /maps;ns:name/entries */
           ps.withMapByNameDo(req, res, ns, name, function(map, mapID, etag) {
             entriesRequest(mapID)

@@ -43,6 +43,19 @@ def main():
     
     print 'sending requests to %s' % BASE_URL 
 
+    # DELETE map
+
+    map_url = urljoin(BASE_URL, '/maps;acme:nursery-rhymes')
+    headers = {'Authorization': 'Bearer %s' % TOKEN1}
+    r = requests.delete(map_url, headers=headers)
+    if r.status_code == 200:
+        print 'deleted test map %s etag: %s' % (r.headers['Content-Location'], r.headers['etag'])
+    elif r.status_code == 404:
+        print 'test map was not there %s' % (map_url)
+    else:
+        print 'failed to delete map %s %s %s' % (map_url, r.status_code, r.text)
+        return
+
     map = {
         'isA': 'Map',
         'test-data': True
