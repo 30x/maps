@@ -57,7 +57,7 @@ function deleteMapThen(req, res, mapID, callback) {
   db.deleteMapThen(mapID, withErrorHandling(req, res, callback));
 }
 
-function updateMapThen(req, res, mapID, map, patchedMap, callback) {
+function updateMapThen(req, res, mapID, patchedMap, callback) {
   lib.internalizeURLs(patchedMap, req.headers.host);
   var key = lib.internalizeURL(mapID, req.headers.host);
   db.updateMapThen(mapID, patchedMap, withErrorHandling(req, res, callback));

@@ -20,8 +20,8 @@ function verifyMapName(req, res, user, map, callback) {
             lib.badRequest(res, `unable to check for map name collision. err: ${err}`)
           else
             lib.duplicate(res, `duplicate map name ${map.namespace}:${map.name}`)
-        else // not already there
-          callback()
+        else {// not already there
+          callback(map.namespace, map.name)}
       })
   else
     callback()  
@@ -46,32 +46,37 @@ function addCalculatedMapProperties(req, map, selfURL) {
 }
 
 function createMap(req, res, map) {
-  var user = lib.getUser(req);
-  if (user == null) {
-    lib.unauthorized(req, res);
-  } else { 
+  function primCreateMap() {
+    lib.internalizeURLs(map, req.headers.host) 
+    var permissions = map.permissions
+    if (permissions !== undefined)
+      delete map.permissions
+    var id = uuid()
+    var selfURL = makeMapURL(req, id)
+    lib.createPermissonsFor(req, res, selfURL, permissions, function(permissionsURL, permissions){
+      // Create permissions first. If we fail after creating the permissions resource but before creating the main resource, 
+      // there will be a useless but harmless permissions document.
+      // If we do things the other way around, a map without matching permissions could cause problems.
+      ps.createMapThen(req, res, id, selfURL, map, function(etag) {
+        addCalculatedMapProperties(req, map, selfURL)
+        lib.created(req, res, map, map.self, etag)
+      })
+    })    
+  }
+  var user = lib.getUser(req)
+  if (user == null)
+    lib.unauthorized(req, res)
+  else { 
     var err = verifyMap(req, map, user)
     if (err !== null) 
-      lib.badRequest(res, err);
-    else {
-      verifyMapName(req, res, user, map, function() {
-        lib.internalizeURLs(map, req.headers.host) 
-        var permissions = map.permissions
-        if (permissions !== undefined)
-          delete map.permissions;
-        var id = uuid()
-        var selfURL = makeMapURL(req, id)
-        lib.createPermissonsFor(req, res, selfURL, permissions, function(permissionsURL, permissions){
-          // Create permissions first. If we fail after creating the permissions resource but before creating the main resource, 
-          // there will be a useless but harmless permissions document.
-          // If we do things the other way around, a map without matching permissions could cause problems.
-          ps.createMapThen(req, res, id, selfURL, map, function(etag) {
-            addCalculatedMapProperties(req, map, selfURL)
-            lib.created(req, res, map, map.self, etag)
-          })
-        })
+      lib.badRequest(res, err)
+    else
+      verifyMapName(req, res, user, map, function(namespace, name) {
+        if (namespace === undefined)
+          primCreateMap()
+        else
+          lib.ifAllowedThen(req, res, `/namespaces;${namespace}`, '_resource', 'create', primCreateMap)
       })
-    }
   }
 }
 
@@ -184,11 +189,17 @@ function updateMap(req, res, id, patch) {
   lib.ifAllowedThen(req, res, makeMapURL(req, id), '_resource', 'update', function(map) {
     ps.withMapDo(req, res, id, function(map) {
       var patchedMap = lib.mergePatch(map, patch)
-      verifyMapName(req, res, lib.getUser(req), map, function() {
-        ps.updateMapThen(req, res, id, map, patchedMap, function (etag) {
+      function primUpdateMap() {
+        ps.updateMapThen(req, res, id, patchedMap, function (etag) {
           addCalculatedMapProperties(req, patchedMap, makeMapURL(req, id)) 
           lib.found(req, res, patchedMap, etag);
-        })
+        })    
+      }
+      verifyMapName(req, res, lib.getUser(req), map, function(namespace, name) {
+        if (namespace === undefined)
+          primUpdateMap()
+        else
+          lib.ifAllowedThen(req, res, `/namespaces;${namespace}`, '_resource', 'create', primCreateMap)        
       })
     })
   })
