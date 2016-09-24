@@ -50,7 +50,7 @@ def main():
 
     maps_url = urljoin(BASE_URL, '/maps') 
     
-    # Create map
+    # Create map using POST
 
     headers = {'Content-Type': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
     r = requests.post(maps_url, headers=headers, json=map)
@@ -62,6 +62,8 @@ def main():
         print 'failed to create map %s %s %s' % (maps_url, r.status_code, r.text)
         return
         
+    # GET Map
+
     headers = {'Accept': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
     r = requests.get(map_url, headers=headers, json=map)
     if r.status_code == 200:
@@ -76,14 +78,15 @@ def main():
         print 'failed to retrieve map %s %s %s' % (map_url, r.status_code, r.text)
         return
         
+    # POST entry for Humpty Dumpty
+
     entry = {
         'isA': 'MapEntry',
         'key': 'HumptyDumpty',
         'test-data': True
         }
 
-    entries_url = urljoin(BASE_URL, map['entries']) 
-    
+    entries_url = urljoin(BASE_URL, map['entries'])   
     headers = {'Content-Type': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
     r = requests.post(entries_url, headers=headers, json=entry)
     if r.status_code == 201:
@@ -93,6 +96,8 @@ def main():
     else:
         print 'failed to create entry %s %s %s' % (entries_url, r.status_code, r.text)
         return
+
+    # POST value for HumptyDumpty
 
     headers = {'Content-Type': 'text/plain','Authorization': 'Bearer %s' % TOKEN1}
     r = requests.put(value_ref, headers=headers, data='Humpty Dumpty Sat on a wall')
@@ -104,31 +109,20 @@ def main():
         print 'failed to create value %s %s %s' % (value_ref, r.status_code, r.text)
         return
         
-    entry = {
-        'isA': 'MapEntry',
-        'key': 'LittleMissMuffet',
-        'test-data': True
-        }
-
-    headers = {'Content-Type': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
-    r = requests.post(entries_url, headers=headers, json=entry)
-    if r.status_code == 201:
-        entry_url2 = urljoin(BASE_URL, r.headers['Location'])
-        value_ref2  = urljoin(BASE_URL, r.json()['value'])
-        print 'correctly created entry: %s value: %s :etag: %s' % (entries_url, value_ref, r.headers['etag'])
-    else:
-        print 'failed to create entry %s %s %s' % (entries_url, r.status_code, r.text)
-        return
+    # PUT value for LittleMissMuffet
 
     headers = {'Content-Type': 'text/plain','Authorization': 'Bearer %s' % TOKEN1}
+    value_ref2 = '%s/entries;%s/value' % (map_url, 'LittleMissMuffet')
     r = requests.put(value_ref2, headers=headers, data='Little Miss Muffet\nSat on a tuffet')
-    if r.status_code == 201 or r.status_code == 200:
+    if r.status_code == 200:
         loc = r.headers['Location' if r.status_code == 201 else 'Content-Location']
         print 'correctly created value: %s etag: %s' % (loc, r.headers['etag'])
         value_url = urljoin(BASE_URL, loc)
     else:
         print 'failed to create value %s %s %s' % (value_ref2, r.status_code, r.text)
         return
+
+    # GET value for LittleMissMuffet
 
     headers = {'Authorization': 'Bearer %s' % TOKEN1}
     r = requests.get(value_ref2, headers=headers)
@@ -142,7 +136,8 @@ def main():
     headers = {'Accept': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
     r = requests.get(map_entries, headers=headers, json=map)
     if r.status_code == 200:
-        print 'correctly retrieved map entries: %s' % map_url 
+        print 'correctly retrieved map entries: %s' % map_url
+        print json.dumps(r.json(), indent=4) 
     else:
         print 'failed to retrieve map entries %s %s %s' % (map_url, r.status_code, r.text)
         return
@@ -213,7 +208,7 @@ def main():
     headers = {'Authorization': 'Bearer %s' % TOKEN1}
     r = requests.get(value_url, headers=headers, json=map)
     if r.status_code == 200:
-        print 'correctly retrieved value from map entry by name: %s returned: %s at: %s' % (value_url, r.headers['Content-Location'], r.text)
+        print 'correctly retrieved value from map entry by name: %s at: %s text: %s' % (value_url, r.headers['Content-Location'], r.text)
     else:
         print 'failed to retrieve value from map entry by name %s %s %s' % (value_url, r.status_code, r.text)
         return

@@ -149,7 +149,10 @@ function getValue(req, res, mapID, key) {
   else
     lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'read', function() {
       ps.withValueDo(req, res, mapID, key, function(metadata, value, etag) {
-        lib.found(req, res, value, etag, makeValueURL(req, mapID, key), metadata['Content-Type'])
+        if (metadata.set)
+          lib.found(req, res, value, etag, makeValueURL(req, mapID, key), metadata['Content-Type'])
+        else
+          lib.notFound(req, res)
       })
     })
 }
@@ -219,9 +222,9 @@ function getEntries(req, res, mapID) {
   lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'read', function(map) {
     ps.withEntriesDo(req, res, mapID, function (entries) {
       var apiEntries = entries.map(x=>{
-        x.data.etag = x.etag
-        addCalculatedEntryProperties(req, x.data, x.mapid, x.key)
-        return x.data
+        x.metadata.etag = x.etag
+        addCalculatedEntryProperties(req, x.metadata, x.mapid, x.key)
+        return x.metadata
       }) 
       lib.found(req, res, {isA: 'Collection', self: '//' + req.headers.host + req.url, contents: apiEntries});
     });
@@ -273,8 +276,15 @@ function requestHandler(req, res) {
         entriesRequest(splitPath[1].substring(MAPS.length-1))
       else if (splitPath.length == 4 && splitPath[2].lastIndexOf('entries;',0) > -1 && splitPath[3] == 'value') { /* url of form /MAPS-xxxxxx/entries;{key}/value */
         var mapID = splitPath[1].substring(MAPS.length-1)
-        let key = splitPath[2].substring('entries;'.length);          
-        getValue(req, res, mapID, key)
+        let key = splitPath[2].substring('entries;'.length);    
+        if (req.method == 'GET') 
+          getValue(req, res, mapID, key)
+        else if (req.method == 'PUT')
+          lib.getServerPostBuffer(req, res, function(req, res, value) {
+            upsertValue(req, res, mapID, key, value) 
+          })
+        else
+          lib.notFound(req, res)
       } else
         lib.notFound(req, res)
     } else if (req_url.pathname.lastIndexOf(VALUES, 0) > -1) { /* url of form /VALUES-mapID:{key} */

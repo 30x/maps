@@ -24,7 +24,7 @@ function createMapThen(id, map, callback) {
 
 function createEntryThen(mapid, key, entry, callback) {
   var etag = uuid()
-  var query = `INSERT INTO entries (mapid, key, etag, data) values('${mapid}', '${key}', '${etag}', '${JSON.stringify(entry)}')`;
+  var query = `INSERT INTO values (mapid, key, etag, metadata) values('${mapid}', '${key}', '${etag}', '${JSON.stringify(entry)}')`;
   pool.query(query, function (err, pg_res) {
     if (err)
       callback(err)
@@ -92,7 +92,7 @@ function withMapByNameDo(ns, name, callback) {
 }
 
 function withEntriesDo(mapid, callback) {
-  pool.query(`SELECT * FROM entries WHERE mapid = '${mapid}'`, function (err, pg_res) {
+  pool.query(`SELECT mapid, key, etag, metadata FROM values WHERE mapid = '${mapid}'`, function (err, pg_res) {
     if (err)
       callback(err)
     else
@@ -101,14 +101,14 @@ function withEntriesDo(mapid, callback) {
 }
 
 function withEntryDo(mapid, key, callback) {
-  pool.query(`SELECT * FROM entries WHERE mapid = '${mapid}' and key = '${key}'`, function (err, pg_res) {
+  pool.query(`SELECT mapid, key, etag, metadata FROM values WHERE mapid = '${mapid}' and key = '${key}'`, function (err, pg_res) {
     if (err) 
       callback(err)
     else if (pg_res.rowCount === 0)  
       callback(404)
     else {
       var row = pg_res.rows[0]
-      callback(null, pg_res.rows, pg_res.etag)
+      callback(null, row.metadata, row.etag)
     }
   })
 }
@@ -160,13 +160,10 @@ function executeQuery(query, callback) {
 function init(callback) {
   var query = 'CREATE TABLE IF NOT EXISTS maps (id text primary key, etag text, data jsonb);'
   executeQuery(query, function() {
-    var query = 'CREATE TABLE IF NOT EXISTS entries (mapid text, key text, etag text, data jsonb, PRIMARY KEY (mapid, key));'
+    var query = 'CREATE TABLE IF NOT EXISTS values (mapid text, key text, etag text, metadata jsonb, value bytea, PRIMARY KEY (mapid, key));'
     executeQuery(query, function() {
-      var query = 'CREATE TABLE IF NOT EXISTS values (mapid text, key text, etag text, metadata jsonb, value bytea, PRIMARY KEY (mapid, key));'
-      executeQuery(query, function() {
-        console.log('maps-db: connected to PG, config: ', config);
-        callback();
-      });
+      console.log('maps-db: connected to PG, config: ', config);
+      callback();
     });
   });
 }

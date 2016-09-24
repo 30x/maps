@@ -1,5 +1,5 @@
 'use strict';
-
+var lib = require('http-helper-functions')
 var db;
 if( process.env.DBMS === 'pg')
   db = require('./maps-pg.js')
@@ -30,7 +30,8 @@ function createEntryThen(req, res, mapID, key, entry, callback) {
 }
 
 function upsertValueThen(req, res, mapID, key, value, callback) {
-  db.upsertValueThen(mapID, key, {'Content-Type': req.headers['content-type']}, value, withErrorHandling(req, res, callback));
+  var metadata = {isA: 'MapEntry', 'Content-Type': req.headers['content-type'], key: key, set: true, modifier: lib.getUser(req), modified: new Date().toISOString()}
+  db.upsertValueThen(mapID, key, metadata, value, withErrorHandling(req, res, callback)); 
 }
 
 function withMapDo(req, res, mapID, callback) {
