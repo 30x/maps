@@ -108,6 +108,7 @@ function addCalculatedEntryProperties(req, entry, valuedata, mapID, key) {
   if (valuedata) {
     entry.modified = valuedata.modified
     entry.modifier = valuedata.modifier
+    entry.contentType = valuedata['Content-Type']
   }
   return entry
 }
