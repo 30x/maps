@@ -96,10 +96,10 @@ def main():
 
     headers = {'Content-Type': 'text/plain','Authorization': 'Bearer %s' % TOKEN1}
     r = requests.put(value_ref, headers=headers, data='Humpty Dumpty Sat on a wall')
-    if r.status_code == 201 or r.status_code == 200:
+    if r.status_code == 200:
         loc = r.headers['Location' if r.status_code == 201 else 'Content-Location']
         print 'correctly created value: %s etag: %s' % (loc, r.headers['etag'])
-        value_url = urljoin(BASE_URL, r.headers['Location'])
+        value_url = urljoin(BASE_URL, r.headers['Content-Location'])
     else:
         print 'failed to create value %s %s %s' % (value_ref, r.status_code, r.text)
         return
@@ -156,7 +156,7 @@ def main():
     r = requests.patch(map_url, headers=headers, json=patch)
     if r.status_code == 200:
         patched_map = r.json()
-        print 'correctly patched map: %s etag: %s alias: %s' % (map_url, r.headers['etag'], r.json()['alias'])
+        print 'correctly patched map: %s etag: %s' % (map_url, r.headers['etag'])
     else:
         print 'failed to patch map %s %s %s' % (map_url, r.status_code, r.text)
         return

@@ -134,7 +134,7 @@ function upsertValue(req, res, mapID, key, value) {
     if (req.headers['content-type'] != null) {
       lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'create', function() {
         ps.upsertValueThen(req, res, mapID, key, value, function(etag) {
-          lib.created(req, res, null, makeValueURL(req, mapID, key), etag)
+          lib.found(req, res, null, makeValueURL(req, mapID, key), etag) // Cassanda can't tell us if it was a create or an update, so we just pick one'
         })
       })
     } else
