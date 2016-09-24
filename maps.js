@@ -99,14 +99,20 @@ function makeValueURL(req, mapID, key) {
   return `//${req.headers.host}${VALUES}${mapID}:${key}`
 }
 
-function addCalculatedEntryProperties(req, entry, mapID, key) {
+function addCalculatedEntryProperties(req, entry, valuedata, mapID, key) {
+  entry = entry ? entry : {isA: 'MapEntry'}
+  entry.key = key
   entry.self = makeEntryURL(req, mapID, key)
   entry.value = makeValueURL(req, mapID, key)
   entry.map = makeMapURL(req, mapID)
+  if (valuedata) {
+    entry.modified = valuedata.modified
+    entry.modifier = valuedata.modifier
+  }
+  return entry
 }
 
 function createEntry(req, res, mapID, entry) {
-  var key = entry.key
   var user = lib.getUser(req)
   if (user == null)
     lib.unauthorized(req, res)
@@ -117,8 +123,10 @@ function createEntry(req, res, mapID, entry) {
     else {
       lib.internalizeURLs(entry, req.headers.host)
       lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'create', function() {
+        var key = entry.key
+        delete entry.key
         ps.createEntryThen(req, res, mapID, key, entry, function(etag) {
-          addCalculatedEntryProperties(req, entry, mapID, key)
+          addCalculatedEntryProperties(req, entry, null, mapID, key)
           lib.created(req, res, entry, entry.self, etag)
         })
       })
@@ -148,9 +156,9 @@ function getValue(req, res, mapID, key) {
     lib.unauthorized(req, res);
   else
     lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'read', function() {
-      ps.withValueDo(req, res, mapID, key, function(metadata, value, etag) {
-        if (metadata.set)
-          lib.found(req, res, value, etag, makeValueURL(req, mapID, key), metadata['Content-Type'])
+      ps.withValueDo(req, res, mapID, key, function(valuedata, value, etag) {
+        if (valuedata)
+          lib.found(req, res, value, etag, makeValueURL(req, mapID, key), valuedata['Content-Type'])
         else
           lib.notFound(req, res)
       })
@@ -211,8 +219,8 @@ function updateMap(req, res, id, patch) {
 
 function getEntry(req, res, mapID, key) {
   lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'read', function(map) {
-    ps.withEntryDo(req, res, mapID, key, function (entry, etag) {
-      addCalculatedEntryProperties(req, entry, mapID, key)
+    ps.withEntryDo(req, res, mapID, key, function (entry, valuedata, etag) {
+      entry = addCalculatedEntryProperties(req, entry, valuedata, mapID, key)
       lib.found(req, res, entry, etag, entry.self);
     });
   });
@@ -222,9 +230,8 @@ function getEntries(req, res, mapID) {
   lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'read', function(map) {
     ps.withEntriesDo(req, res, mapID, function (entries) {
       var apiEntries = entries.map(x=>{
-        x.metadata.etag = x.etag
-        addCalculatedEntryProperties(req, x.metadata, x.mapid, x.key)
-        return x.metadata
+        x.valuedata.etag = x.etag
+        return addCalculatedEntryProperties(req, x.entrydata, x.valuedata, x.mapid, x.key)
       }) 
       lib.found(req, res, {isA: 'Collection', self: '//' + req.headers.host + req.url, contents: apiEntries});
     });

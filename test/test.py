@@ -133,14 +133,17 @@ def main():
         print 'failed to get value %s %s %s' % (value_ref2, r.status_code, r.text)
         return
 
+    # GET all entries for map
+
     headers = {'Accept': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
     r = requests.get(map_entries, headers=headers, json=map)
     if r.status_code == 200:
         print 'correctly retrieved map entries: %s' % map_url
-        print json.dumps(r.json(), indent=4) 
     else:
         print 'failed to retrieve map entries %s %s %s' % (map_url, r.status_code, r.text)
         return
+
+    # PATCH map
 
     patch = {
         'name': 'nursery-rhymes',
@@ -155,6 +158,8 @@ def main():
     else:
         print 'failed to patch map %s %s %s' % (map_url, r.status_code, r.text)
         return
+
+    # GET map by name
 
     name_url = urljoin(BASE_URL, '/maps;acme:nursery-rhymes')
     headers = {'Accept': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
@@ -172,7 +177,7 @@ def main():
         'test-data': True
         }
 
-    # Create map
+    # Create map with duplicate name
 
     headers = {'Content-Type': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
     r = requests.post(maps_url, headers=headers, json=map)
@@ -181,6 +186,8 @@ def main():
     else:
         print 'failed to reject map with duplicate name %s %s %s' % (maps_url, r.status_code, r.text)
         return
+
+    # GET entries by map name
 
     entries_url = urljoin(BASE_URL, '/maps;acme:nursery-rhymes/entries')
     headers = {'Accept': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
@@ -195,6 +202,8 @@ def main():
         print 'failed to retrieve map entries by name %s %s %s' % (entries_url, r.status_code, r.text)
         return
 
+    # GET entry by map name and key
+
     entry_url = urljoin(BASE_URL, '/maps;acme:nursery-rhymes/entries;HumptyDumpty')
     headers = {'Accept': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
     r = requests.get(entry_url, headers=headers, json=map)
@@ -203,6 +212,8 @@ def main():
     else:
         print 'failed to retrieve map entry by name from map by name %s %s %s' % (entry_url, r.status_code, r.text)
         return
+
+    # GET value by map name and key
 
     value_url = urljoin(BASE_URL, '/maps;acme:nursery-rhymes/entries;HumptyDumpty/value')
     headers = {'Authorization': 'Bearer %s' % TOKEN1}

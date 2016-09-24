@@ -30,8 +30,8 @@ function createEntryThen(req, res, mapID, key, entry, callback) {
 }
 
 function upsertValueThen(req, res, mapID, key, value, callback) {
-  var metadata = {isA: 'MapEntry', 'Content-Type': req.headers['content-type'], key: key, set: true, modifier: lib.getUser(req), modified: new Date().toISOString()}
-  db.upsertValueThen(mapID, key, metadata, value, withErrorHandling(req, res, callback)); 
+  var valueData = {isA: 'MapEntry', 'Content-Type': req.headers['content-type'], key: key, modifier: lib.getUser(req), modified: new Date().toISOString()}
+  db.upsertValueThen(mapID, key, valueData, value, withErrorHandling(req, res, callback)); 
 }
 
 function withMapDo(req, res, mapID, callback) {

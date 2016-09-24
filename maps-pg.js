@@ -24,7 +24,7 @@ function createMapThen(id, map, callback) {
 
 function createEntryThen(mapid, key, entry, callback) {
   var etag = uuid()
-  var query = `INSERT INTO values (mapid, key, etag, metadata) values('${mapid}', '${key}', '${etag}', '${JSON.stringify(entry)}')`;
+  var query = `INSERT INTO values (mapid, key, etag, entrydata) values('${mapid}', '${key}', '${etag}', '${JSON.stringify(entry)}')`;
   pool.query(query, function (err, pg_res) {
     if (err)
       callback(err)
@@ -33,9 +33,9 @@ function createEntryThen(mapid, key, entry, callback) {
   })
 }
 
-function upsertValueThen(mapid, key, metadata, value, callback) {
+function upsertValueThen(mapid, key, valueData, value, callback) {
   var etag = uuid()
-  var query = `INSERT INTO values (mapid, key, etag, metadata, value) values('${mapid}', '${key}', '${etag}', '${JSON.stringify(metadata)}', '${value}') ON CONFLICT (mapid, key) DO UPDATE SET (etag, metadata, value) = (EXCLUDED.etag, EXCLUDED.metadata, EXCLUDED.value)`;
+  var query = `INSERT INTO values (mapid, key, etag, valuedata, value) values('${mapid}', '${key}', '${etag}', '${JSON.stringify(valueData)}', '${value}') ON CONFLICT (mapid, key) DO UPDATE SET (etag, valuedata, value) = (EXCLUDED.etag, EXCLUDED.valuedata, EXCLUDED.value)`;
   pool.query(query, function (err, pg_res) {
     if (err) {
       callback(err);
@@ -64,7 +64,7 @@ function withMapDo(id, callback) {
 }
 
 function withValueDo(mapID, key, callback) {
-  var query = `SELECT etag, metadata, value FROM values WHERE mapid = '${mapID}' AND key = '${key}'`
+  var query = `SELECT etag, valuedata, value FROM values WHERE mapid = '${mapID}' AND key = '${key}'`
   pool.query(query, function (err, pg_res) {
     if (err) 
       callback(err)
@@ -73,7 +73,7 @@ function withValueDo(mapID, key, callback) {
         callback(404)
       else {
         var row = pg_res.rows[0];
-        callback(null, row.metadata, row.value, row.etag);
+        callback(null, row.valuedata, row.value, row.etag)
       }
   })
 }
@@ -92,7 +92,7 @@ function withMapByNameDo(ns, name, callback) {
 }
 
 function withEntriesDo(mapid, callback) {
-  pool.query(`SELECT mapid, key, etag, metadata FROM values WHERE mapid = '${mapid}'`, function (err, pg_res) {
+  pool.query(`SELECT mapid, key, etag, entrydata, valuedata FROM values WHERE mapid = '${mapid}'`, function (err, pg_res) {
     if (err)
       callback(err)
     else
@@ -101,14 +101,14 @@ function withEntriesDo(mapid, callback) {
 }
 
 function withEntryDo(mapid, key, callback) {
-  pool.query(`SELECT mapid, key, etag, metadata FROM values WHERE mapid = '${mapid}' and key = '${key}'`, function (err, pg_res) {
+  pool.query(`SELECT mapid, key, etag, entrydata, valuedata FROM values WHERE mapid = '${mapid}' and key = '${key}'`, function (err, pg_res) {
     if (err) 
       callback(err)
     else if (pg_res.rowCount === 0)  
       callback(404)
     else {
       var row = pg_res.rows[0]
-      callback(null, row.metadata, row.etag)
+      callback(null, row.valuedata, row.etag)
     }
   })
 }
@@ -160,7 +160,7 @@ function executeQuery(query, callback) {
 function init(callback) {
   var query = 'CREATE TABLE IF NOT EXISTS maps (id text primary key, etag text, data jsonb);'
   executeQuery(query, function() {
-    var query = 'CREATE TABLE IF NOT EXISTS values (mapid text, key text, etag text, metadata jsonb, value bytea, PRIMARY KEY (mapid, key));'
+    var query = 'CREATE TABLE IF NOT EXISTS values (mapid text, key text, etag text, entrydata jsonb, valuedata jsonb, value bytea, PRIMARY KEY (mapid, key));'
     executeQuery(query, function() {
       console.log('maps-db: connected to PG, config: ', config);
       callback();

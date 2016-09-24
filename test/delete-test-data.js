@@ -11,19 +11,19 @@ var config = {
 console.log(`start delete test data`)
 var pool = new Pool(config);
 
-function deleteTestDataThen(table, callback) {
-  var query = `DELETE FROM ${table} WHERE data @> '{"test-data": true}'`;
-  pool.query(query, function (err, pg_res) {
-    if (err) 
-      console.log(`failed to delete test data from ${table} err: ${err}`)
-    else
-      console.log(`successfully deleted test data from ${table}`)      
-    callback()
-  });
-}
-
-deleteTestDataThen('maps', function(){
-  deleteTestDataThen('entries', function() {
-    pool.end()
-  })
+var query = `DELETE FROM maps WHERE data @> '{"test-data": true}'`
+pool.query(query, function (err, pg_res) {
+  if (err) 
+    console.log(`failed to delete test data from msps err: ${err}`)
+  else {
+    console.log(`successfully deleted test data from maps`)
+    var query = `DELETE FROM values WHERE entryData @> '{"test-data": true}'`
+    pool.query(query, function (err, pg_res) {
+      if (err) 
+        console.log(`failed to delete test entryData from values err: ${err}`)
+      else 
+        console.log(`successfully deleted test data from values`)
+      pool.end()
+    })
+  }
 })
