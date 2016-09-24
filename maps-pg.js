@@ -35,7 +35,7 @@ function createEntryThen(mapid, key, entry, callback) {
 
 function upsertValueThen(mapid, key, metadata, value, callback) {
   var etag = uuid()
-  var query = `INSERT INTO values (mapid, key, etag, metadata, value) values('${mapid}', '${key}', '${etag}', '${JSON.stringify(metadata)}', '${value}') ON CONFLICT (mapid, key) DO UPDATE SET (etag, metadata, value) = (EXCLUDED. etag, EXCLUDED.metadata, EXCLUDED.value)`;
+  var query = `INSERT INTO values (mapid, key, etag, metadata, value) values('${mapid}', '${key}', '${etag}', '${JSON.stringify(metadata)}', '${value}') ON CONFLICT (mapid, key) DO UPDATE SET (etag, metadata, value) = (EXCLUDED.etag, EXCLUDED.metadata, EXCLUDED.value)`;
   pool.query(query, function (err, pg_res) {
     if (err) {
       callback(err);
