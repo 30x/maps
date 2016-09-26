@@ -205,7 +205,7 @@ function updateMapByName(req, res, ns, name, patch) {
 }
 
 function deleteMap(req, res, id) {
-  lib.ifAllowedThen(req, res, null, '_resource', 'delete', function() {
+  lib.ifAllowedThen(req, res, makeMapURL(req, id), '_resource', 'delete', function() {
     ps.deleteMapThen(req, res, id, function (map, etag) {
       lib.found(req, res, map, etag)
     })
