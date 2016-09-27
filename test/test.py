@@ -153,7 +153,6 @@ def main():
     r = requests.get(entry_ref2, headers=headers)
     if r.status_code == 200:
         value_ref  = urljoin(BASE_URL, r.json()['value'])
-        print value_ref, value_url
         assert(value_ref == value_url)
         print 'correctly retrieved entry: %s value: %s map: %s etag: %s' % (entry_ref2, value_ref, urljoin(BASE_URL, r.json()['map']), r.headers['etag'])
     else:
