@@ -64,10 +64,6 @@ function updateMapThen(req, res, mapID, patchedMap, callback) {
   db.updateMapThen(mapID, patchedMap, withErrorHandling(req, res, callback));
 }
 
-function executeQuery(query, callback) {
-  pool.query(query, withErrorHandling(req, res, callback));
-}
-
 function init(callback) {
   db.init(callback)
 }

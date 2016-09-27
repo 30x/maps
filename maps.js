@@ -178,9 +178,18 @@ function getMap(req, res, mapID) {
 }
 
 function deleteMap(req, res, mapID) {
-  lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'delete', function() {
+  var mapURL = makeMapURL(req, mapID)
+  lib.ifAllowedThen(req, res, mapURL, '_resource', 'delete', function() {
     ps.deleteMapThen(req, res, mapID, function (map, etag) {
-      lib.found(req, res, map, etag)
+      var permissionsURL = `/permissions?${mapURL}`
+      lib.sendInternalRequest(req, res, permissionsURL, 'DELETE', null, function (clientRes) {
+        lib.getClientResponseBody(clientRes, function(body) {
+          if (clientRes.statusCode == 200)  
+            lib.found(req, res, map, etag)
+          else
+            lib.internalError(res, `failed to delete permissions: ${permissionsURL} status_code: ${clientRes.status_code} data: ${body}`);
+        })
+      })
     })
   })
 }
