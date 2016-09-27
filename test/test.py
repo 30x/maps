@@ -105,9 +105,20 @@ def main():
     if r.status_code == 201:
         entry_url = urljoin(BASE_URL, r.headers['Location'])
         value_ref  = urljoin(BASE_URL, r.json()['value'])
-        print 'correctly created entry: %s value: %s map: %s etag: %s' % (entries_url, value_ref, urljoin(BASE_URL, r.json()['map']), r.headers['etag'])
+        print 'correctly created entry: %s value: %s map: %s etag: %s' % (entry_url, value_ref, urljoin(BASE_URL, r.json()['map']), r.headers['etag'])
     else:
         print 'failed to create entry %s %s %s' % (entries_url, r.status_code, r.text)
+        return
+
+    # GET entry for Humpty Dumpty
+
+    headers = {'Accept': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
+    r = requests.get(entry_url, headers=headers)
+    if r.status_code == 200:
+        value_ref  = urljoin(BASE_URL, r.json()['value'])
+        print 'correctly retrieved entry: %s value: %s map: %s etag: %s' % (entry_url, value_ref, urljoin(BASE_URL, r.json()['map']), r.headers['etag'])
+    else:
+        print 'failed to retrieve entry %s %s %s' % (entry_url, r.status_code, r.text)
         return
 
     # POST value for HumptyDumpty
@@ -115,7 +126,7 @@ def main():
     headers = {'Content-Type': 'text/plain','Authorization': 'Bearer %s' % TOKEN1}
     r = requests.put(value_ref, headers=headers, data='Humpty Dumpty Sat on a wall')
     if r.status_code == 200:
-        loc = r.headers['Location' if r.status_code == 201 else 'Content-Location']
+        loc = r.headers['Content-Location']
         print 'correctly created value: %s etag: %s' % (loc, r.headers['etag'])
         value_url = urljoin(BASE_URL, r.headers['Content-Location'])
     else:
@@ -128,11 +139,25 @@ def main():
     value_ref2 = '%s/entries;%s/value' % (map_url, 'LittleMissMuffet')
     r = requests.put(value_ref2, headers=headers, data='Little Miss Muffet\nSat on a tuffet')
     if r.status_code == 200:
-        loc = r.headers['Location' if r.status_code == 201 else 'Content-Location']
+        loc = r.headers['Content-Location']
         print 'correctly created value: %s etag: %s' % (loc, r.headers['etag'])
         value_url = urljoin(BASE_URL, loc)
     else:
         print 'failed to create value %s %s %s' % (value_ref2, r.status_code, r.text)
+        return
+
+    # GET entry for LittleMissMuffet
+
+    entry_ref2 = '%s/entries;%s' % (map_url, 'LittleMissMuffet')
+    headers = {'Accept': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
+    r = requests.get(entry_ref2, headers=headers)
+    if r.status_code == 200:
+        value_ref  = urljoin(BASE_URL, r.json()['value'])
+        print value_ref, value_url
+        assert(value_ref == value_url)
+        print 'correctly retrieved entry: %s value: %s map: %s etag: %s' % (entry_ref2, value_ref, urljoin(BASE_URL, r.json()['map']), r.headers['etag'])
+    else:
+        print 'failed to retrieve entry %s %s %s' % (entry_ref2, r.status_code, r.text)
         return
 
     # GET value for LittleMissMuffet

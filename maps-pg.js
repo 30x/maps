@@ -35,7 +35,8 @@ function createEntryThen(mapid, key, entry, callback) {
 
 function upsertValueThen(mapid, key, valueData, value, callback) {
   var etag = uuid()
-  var query = `INSERT INTO values (mapid, key, etag, valuedata, value) values('${mapid}', '${key}', '${etag}', '${JSON.stringify(valueData)}', '${value}') ON CONFLICT (mapid, key) DO UPDATE SET (etag, valuedata, value) = (EXCLUDED.etag, EXCLUDED.valuedata, EXCLUDED.value)`;
+  valueData.etag = uuid()
+  var query = `INSERT INTO values (mapid, key, valuedata, value) values('${mapid}', '${key}', '${JSON.stringify(valueData)}', '${value}') ON CONFLICT (mapid, key) DO UPDATE SET (etag, valuedata, value) = (EXCLUDED.etag, EXCLUDED.valuedata, EXCLUDED.value)`;
   pool.query(query, function (err, pg_res) {
     if (err) {
       callback(err);
@@ -73,7 +74,7 @@ function withValueDo(mapID, key, callback) {
         callback(404)
       else {
         var row = pg_res.rows[0];
-        callback(null, row.valuedata, row.value, row.etag)
+        callback(null, row.valuedata, row.value, row.valuedata.etag)
       }
   })
 }
@@ -101,14 +102,14 @@ function withEntriesDo(mapid, callback) {
 }
 
 function withEntryDo(mapid, key, callback) {
-  pool.query(`SELECT mapid, key, etag, entrydata, valuedata FROM values WHERE mapid = '${mapid}' and key = '${key}'`, function (err, pg_res) {
+  pool.query(`SELECT mapid, key, etag, entrydata FROM values WHERE mapid = '${mapid}' and key = '${key}'`, function (err, pg_res) {
     if (err) 
       callback(err)
     else if (pg_res.rowCount === 0)  
       callback(404)
     else {
       var row = pg_res.rows[0]
-      callback(null, row.valuedata, row.etag)
+      callback(null, row.entrydata, row.etag)
     }
   })
 }
