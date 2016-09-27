@@ -284,16 +284,16 @@ function requestHandler(req, res) {
       lib.methodNotAllowed(req, res, ['GET', 'DELETE', 'PATCH'])    
   }
   function handleEntryMethods(mapID, key) {
-      if (req.method == 'GET') 
-        getEntry(req, res, mapID, key)
-      else if (req.method == 'PATCH')
-        lib.getServerPostBuffer(req, res, function(req, res, value) {
-          upsertVupdateEntryalue(req, res, mapID, key, value) 
-        })
-      else if (req.method == 'DELETE') 
-        deleteEntry(req, res, mapID, key)
-      else
-        lib.methodNotAllowed(req, res, ['GET', 'PATCH', 'DELETE'])    
+    if (req.method == 'GET') 
+      getEntry(req, res, mapID, key)
+    else if (req.method == 'PATCH')
+      lib.getServerPostBuffer(req, res, function(req, res, value) {
+        upsertVupdateEntryalue(req, res, mapID, key, value) 
+      })
+    else if (req.method == 'DELETE') 
+      deleteEntry(req, res, mapID, key)
+    else
+      lib.methodNotAllowed(req, res, ['GET', 'PATCH', 'DELETE'])    
   }
   function handleValueMethods(mapID, key) {
     if (req.method == 'GET') 
@@ -307,6 +307,18 @@ function requestHandler(req, res) {
     else
       lib.methodNotAllowed(req, res, ['GET', 'PUT', 'DELETE'])
   }
+  function handleMapPaths(splitPath, mapID) {
+    if (splitPath.length == 2)
+      handleMapMethods(mapID)
+    else if (splitPath.length == 3 && splitPath[2] == 'entries') /* url of form /maps;ns:name/entries */
+      handleEntriesMethods(mapID)
+    else if (splitPath.length == 3 && splitPath[2].lastIndexOf('entries;',0) > -1) /* url of form /maps;ns:name/entries;{key} */
+      handleEntryMethods(mapID, splitPath[2].substring('entries;'.length))
+    else if (splitPath.length == 4 && splitPath[2].lastIndexOf('entries;',0) > -1 && splitPath[3] == 'value') /* url of form /maps;ns:name/entries;{key}/value */
+      handleValueMethods(mapID, splitPath[2].substring('entries;'.length))
+    else
+      lib.notFound(req, res)  
+  }
   if (req.url == '/maps') 
     if (req.method == 'POST')
       lib.getServerPostObject(req, res, createMap)
@@ -316,16 +328,7 @@ function requestHandler(req, res) {
     var req_url = url.parse(req.url);
     if (req_url.pathname.lastIndexOf(MAPS, 0) > -1) { /* url of form /MAPS-xxxxxx */
       let splitPath = req_url.pathname.split('/')
-      if (splitPath.length == 2) // first entry is always '' because pathname always begins with '/'
-        handleMapMethods(req_url.pathname.substring(MAPS.length))
-      else if (splitPath.length == 3 && splitPath[2] == 'entries')  /* url of form /MAPS-xxxxxx/entries */
-        handleEntriesMethods(splitPath[1].substring(MAPS.length-1))
-      else if (splitPath.length == 3 && splitPath[2].lastIndexOf('entries;',0) > -1 ) /* url of form /MAPS-xxxxxx/entries;{key} */
-        handleEntryMethods(splitPath[1].substring(MAPS.length-1), splitPath[2].substring('entries;'.length))
-      else if (splitPath.length == 4 && splitPath[2].lastIndexOf('entries;',0) > -1 && splitPath[3] == 'value') /* url of form /MAPS-xxxxxx/entries;{key}/value */
-        handleValueMethods(splitPath[1].substring(MAPS.length-1), splitPath[2].substring('entries;'.length))
-      else
-        lib.notFound(req, res)
+      handleMapPaths(splitPath, splitPath[1].substring(MAPS.length-1))
     } else if (req_url.pathname.lastIndexOf(ENTRIES, 0) > -1) { /* url of form /ENTRIES-mapID:{key} */
       let splitPath = req_url.pathname.split('/')
       let entryID = splitPath[1].substring(ENTRIES.length-1)
@@ -345,19 +348,7 @@ function requestHandler(req, res) {
       let mapFullName = splitPath[1].substring('maps;'.length)
       getNameParts(req, res, mapFullName, function(ns, name) {
         ps.withMapByNameDo(req, res, ns, name, function(map, mapID, etag) {
-          if (splitPath.length == 2)
-            handleMapMethods(mapID)
-          else if (splitPath.length == 3 && splitPath[2] == 'entries') /* url of form /maps;ns:name/entries */
-            if (req.method == 'GET')
-              handleEntriesMethods(mapID)
-            else
-              lib.methodNotAllowed(req, res, ['GET'])
-          else if (splitPath.length == 3 && splitPath[2].lastIndexOf('entries;',0) > -1) /* url of form /maps;ns:name/entries;{key} */
-            handleEntryMethods(mapID, splitPath[2].substring('entries;'.length))
-          else if (splitPath.length == 4 && splitPath[2].lastIndexOf('entries;',0) > -1 && splitPath[3] == 'value') /* url of form /maps;ns:name/entries;{key}/value */
-            handleValueMethods(mapID, splitPath[2].substring('entries;'.length))
-          else
-            lib.notFound(req, res)
+          handleMapPaths(splitPath, mapID)
         })
       })
     } else 
