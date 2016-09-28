@@ -203,18 +203,19 @@ function updateMap(req, res, mapID, patch) {
 }
 
 function securedUpdateMap(req, res, mapID, map, patch) {
-  var patchedMap = lib.mergePatch(map, patch)
-  function primUpdateMap() {
-    ps.updateMapThen(req, res, mapID, patchedMap, function (etag) {
-      addCalculatedMapProperties(req, patchedMap, makeMapURL(req, mapID)) 
-      lib.found(req, res, patchedMap, etag);
-    })    
-  }
-  verifyMapName(req, res, lib.getUser(req), map, function(namespace, name) {
-    if (namespace === undefined)
-      primUpdateMap()
-    else
-      lib.ifAllowedThen(req, res, `/namespaces;${namespace}`, '_resource', 'create', primUpdateMap)        
+  lib.applyPatch(req, res, map, patch, function(patchedMap) {
+    function primUpdateMap() {
+      ps.updateMapThen(req, res, mapID, patchedMap, function (etag) {
+        addCalculatedMapProperties(req, patchedMap, makeMapURL(req, mapID)) 
+        lib.found(req, res, patchedMap, etag);
+      })    
+    }
+    verifyMapName(req, res, lib.getUser(req), map, function(namespace, name) {
+      if (namespace === undefined)
+        primUpdateMap()
+      else
+        lib.ifAllowedThen(req, res, `/namespaces;${namespace}`, '_resource', 'create', primUpdateMap)        
+    })
   })  
 }
 
@@ -239,10 +240,11 @@ function deleteEntry(req, res, mapID, key) {
 function updateEntry(req, res, mapID, key, patch) {
   lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'update', function() {
     ps.withEntryDo(req, res, mapID, key, function(entry, etag) {
-      var patchedEntry = lib.mergePatch(entry || {}, patch)
-      ps.updateEntryThen(req, res, mapID, key, patchedEntry, function (etag) {
-        addCalculatedMapProperties(req, patchedMap, makeEntryURL(req, mapID, key)) 
-        lib.found(req, res, patchedMap, etag);
+      lib.applyPatch(req, res, entry || {}, patch, function(patchedEntry) {
+        ps.updateEntryThen(req, res, mapID, key, patchedEntry, function (etag) {
+          addCalculatedMapProperties(req, patchedMap, makeEntryURL(req, mapID, key)) 
+          lib.found(req, res, patchedMap, etag);
+        })
       })    
     })
   })
