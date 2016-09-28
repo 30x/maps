@@ -252,7 +252,7 @@ function getEntries(req, res, mapID) {
   lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'read', function(map) {
     ps.withEntriesDo(req, res, mapID, function (entries) {
       var apiEntries = entries.map(x=>{
-        x.valuedata.etag = x.etag
+        x.entrydata.etag = x.etag
         return addCalculatedEntryProperties(req, x.entrydata, x.mapid, x.key)
       }) 
       lib.found(req, res, {isA: 'Collection', self: '//' + req.headers.host + req.url, contents: apiEntries});

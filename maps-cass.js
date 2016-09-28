@@ -42,8 +42,8 @@ const SEPARATOR = '?'
 const insertNamespace = 'INSERT INTO ' + config.databaseKeyspace + '.namespaces (namespace, mapid, mapname) VALUES (?, ?, ?)'
 const insertMap = 'INSERT INTO ' + config.databaseKeyspace + '.maps (mapid, map, etag) VALUES (?, ?, ?)'
 const insertIndex = 'INSERT INTO ' + config.databaseKeyspace + '.indexes (name, mapid) VALUES (?, ?)'
-const insertMapEntry = 'INSERT INTO ' + config.databaseKeyspace + '.entries (mapid, key, data, etag) VALUES (?, ?, ?, ?)'
-const insertMapValue = 'INSERT INTO ' + config.databaseKeyspace + '.values (mapid, key, data, value, etag) VALUES (? ,?, ?, ?, ?)'
+const insertMapEntry = 'INSERT INTO ' + config.databaseKeyspace + '.entries (mapid, key, entrydata, etag) VALUES (?, ?, ?, ?)'
+const insertMapValue = 'INSERT INTO ' + config.databaseKeyspace + '.values (mapid, key, valuedata, value, etag) VALUES (? ,?, ?, ?, ?)'
 
 // selects
 const selectNamespace = 'SELECT * FROM ' + config.databaseKeyspace + '.namespaces WHERE namespace = ?'
@@ -51,7 +51,7 @@ const selectMap = 'SELECT * FROM ' + config.databaseKeyspace + '.maps WHERE mapi
 const selectmapIdFromName = 'SELECT mapid FROM ' + config.databaseKeyspace + '.indexes WHERE name = ?'
 const selectEntries = 'SELECT * FROM ' + config.databaseKeyspace + '.entries WHERE mapid = ?'
 const selectEntry = 'SELECT * FROM ' + config.databaseKeyspace + '.entries WHERE mapid = ? and key = ?'
-const selectValue = 'SELECT data, value, etag FROM ' + config.databaseKeyspace + '.values WHERE mapid = ? and key = ?'
+const selectValue = 'SELECT valuedata, value, etag FROM ' + config.databaseKeyspace + '.values WHERE mapid = ? and key = ?'
 
 //deletes
 const deleteMapNamespace = 'DELETE FROM ' + config.databaseKeyspace + '.namespaces WHERE namespace = ? and mapid = ?'
@@ -213,7 +213,10 @@ function updateMapThen(mapId, patchedMap, callback) {
 
 function createEntryThen(mapId, key, entry, callback) {
   var etag = uuidgen.v4()
-  client.execute(insertMapEntry, [cassandra.types.Uuid.fromString(mapId), key, JSON.stringify(entry), etag], {prepare: true}, function (err, result) {
+  const batchQueries = [
+    {query: insertMapEntry, params: [cassandra.types.Uuid.fromString(mapId), key, JSON.stringify(entry), etag]}, // empty value data
+  ]
+  client.batch(batchQueries, {prepare: true}, function (err, result) {
     if (err)
       callback(err)
     else {
@@ -223,22 +226,27 @@ function createEntryThen(mapId, key, entry, callback) {
   })
 }
 
-function upsertValueThen(mapId, key, data, value, callback) {
-  createMapValue(mapId, key, data, value, callback)
+function upsertValueThen(mapId, key, valuedata, value, callback) {
+  createMapValue(mapId, key, valuedata, value, callback)
 }
 
-function createMapValue(mapId, key, data, value, callback) {
+function createMapValue(mapId, key, valuedata, value, callback) {
   if (!(value instanceof Buffer)) {
     callback(true, {error: 'Value must be a Buffer'})
   }
   var etag = uuidgen.v4()
-  client.execute(insertMapValue, [cassandra.types.Uuid.fromString(mapId), key, JSON.stringify(data), value, etag], {prepare: true}, function (err, result) {
+  // purposely need two separate calls to cassandra as you can't execute a batch with 2 partitions ( tables ) with the condition IF NOT EXISTS
+  client.execute(insertMapValue,  [cassandra.types.Uuid.fromString(mapId), key, JSON.stringify(valuedata), value, etag], {prepare: true}, function (err, result) {
     if (err)
       callback(err)
     else {
-      callback(null, etag) // inserts do not generate result rows
+      client.execute(insertMapEntry + 'IF NOT EXISTS',  [cassandra.types.Uuid.fromString(mapId), key, JSON.stringify({}), etag], {prepare: true}, function (err, result) {
+        if (err)
+          callback(err)
+        else
+          callback(null, etag) // inserts do not generate result rows
+      })
     }
-
   })
 }
 
@@ -286,6 +294,8 @@ function getMapId(namespace, name, callback) {
   client.execute(selectmapIdFromName, [indexName], {prepare: true}, function (err, result) {
     if (err)
       callback(err)
+    else if ( result.rows.length === 0)
+      callback(404)
     else if ( result.rows.length > 1)
       callback(true, {error:'More than one UUID mapped to map name'})
     else
@@ -298,13 +308,19 @@ function withEntriesDo(mapId, callback) {
   client.execute(selectEntries, [cassandra.types.Uuid.fromString(mapId)], {prepare: true}, function (err, result) {
     if (err)
       callback(err)
-    else
-      if(result.rows.length > 0){
-        result.rows.forEach(function(entry){
-          entry.data = JSON.parse(entry.data)
+    else {
+      if (result.rows.length > 0) {
+        var processed = 0;
+        result.rows.forEach(function (entry) {
+          processed++
+          entry.entrydata = JSON.parse(entry.entrydata)
+          if(processed === result.rows.length)
+            callback(null, result.rows) // we're done looping, now invoke callback
         })
       }
-      callback(null, result.rows.length > 0 ? result.rows : null)
+      else
+        callback(null, null)
+    }
   })
 }
 
@@ -314,13 +330,13 @@ function withEntryDo(mapId, key, callback) {
     if (err)
       callback(err)
     else
-      var key, etag, data
+      var key, etag, entrydata
       if(result.rows.length > 0){
         key = result.rows[0].get('key')
-        data = result.rows[0].get('data') ? JSON.parse(result.rows[0].get('data')) : null
+        entrydata = result.rows[0].get('entrydata') ? JSON.parse(result.rows[0].get('entrydata')) : null
         etag = result.rows[0].get('etag')
       }
-      callback(null, key, data, etag)
+      callback(null, entrydata, etag)
   })
 }
 
@@ -330,13 +346,13 @@ function withValueDo(mapId, key, callback) {
     if (err)
       callback(err)
     else
-      var value, data, etag
+      var value, valuedata, etag
       if(result.rows.length > 0){
         value = result.rows[0].get('value')
-        data = result.rows[0].get('data')
+        valuedata = result.rows[0].get('valuedata')
         etag = result.rows[0].get('etag')
       }
-      callback(null, JSON.parse(data), value, etag)
+      callback(null, JSON.parse(valuedata), value, etag)
   })
 }
 
@@ -416,9 +432,8 @@ function deleteMapThen(mapId, callback) {
           if (err)
             callback(err)
           else {
-            var oMap = map ? JSON.parse(map) : null
-            var name = oMap ? oMap.name : null
-            var namespace = oMap ? oMap.namespace : null
+            var name = map.name ? map.name : null
+            var namespace = map.namespace ? map.namespace : null
 
             client.execute(deleteMap, [mapId], {prepare: true}, function (err, deleteResult) {
               if (err)
@@ -434,7 +449,7 @@ function deleteMapThen(mapId, callback) {
                   if (err)
                     callback(err)
                   else
-                    callback(null)
+                    callback(null, map, etag)
                 })
               }
             })
@@ -456,8 +471,8 @@ function init(callback) {
   var namespaces = "CREATE TABLE IF NOT EXISTS " + config.databaseKeyspace + ".namespaces ( namespace text, mapid uuid, mapname text, PRIMARY KEY ((namespace), mapid ))"
   var maps = "CREATE TABLE IF NOT EXISTS " + config.databaseKeyspace + ".maps ( mapid uuid, map text, etag text, PRIMARY KEY (( mapid )))"
   var names = "CREATE TABLE IF NOT EXISTS " + config.databaseKeyspace + ".indexes ( name text, mapid uuid, PRIMARY KEY ((name), mapid))"
-  var entries = "CREATE TABLE IF NOT EXISTS " + config.databaseKeyspace + ".entries (mapid uuid, key text, data text, etag text, PRIMARY KEY ((mapid), key)) WITH CLUSTERING ORDER BY (key ASC)"
-  var values = "CREATE TABLE IF NOT EXISTS " + config.databaseKeyspace + ".values (mapid uuid, key text, data text, value blob, etag text, PRIMARY KEY ((mapid, key)))"
+  var entries = "CREATE TABLE IF NOT EXISTS " + config.databaseKeyspace + ".entries (mapid uuid, key text, entrydata text, etag text, PRIMARY KEY ((mapid), key)) WITH CLUSTERING ORDER BY (key ASC)"
+  var values = "CREATE TABLE IF NOT EXISTS " + config.databaseKeyspace + ".values (mapid uuid, key text, valuedata text, value blob, etag text, PRIMARY KEY ((mapid, key)))"
 
   client.execute(keyspace, {}, function (err, result) {
     if (err)
