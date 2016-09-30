@@ -75,7 +75,7 @@ function createMap(req, res, map) {
         if (namespace === undefined)
           primCreateMap()
         else
-          lib.ifAllowedThen(req, res, `/namespaces;${namespace}`, '_resource', 'create', primCreateMap)
+          lib.ifAllowedThen(req, res, `/namespaces;${namespace}`, '_self', 'create', primCreateMap)
       })
   }
 }
@@ -118,7 +118,7 @@ function createEntry(req, res, mapID, entry) {
       lib.badRequest(res, err)
     else {
       lib.internalizeURLs(entry, req.headers.host)
-      lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'create', function() {
+      lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_self', 'create', function() {
         var key = entry.key
         delete entry.key
         ps.createEntryThen(req, res, mapID, key, entry, function(etag) {
@@ -136,7 +136,7 @@ function upsertValue(req, res, mapID, key, value) {
     lib.unauthorized(req, res)
   else {
     if (req.headers['content-type'] != null) {
-      lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'create', function() {
+      lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_self', 'create', function() {
         ps.upsertValueThen(req, res, mapID, key, value, function(etag) {
           lib.found(req, res, null, etag, makeValueURL(req, mapID, key)) // Cassanda can't tell us if it was a create or an update, so we just pick one'
         })
@@ -151,7 +151,7 @@ function getValue(req, res, mapID, key) {
   if (user == null)
     lib.unauthorized(req, res);
   else
-    lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'read', function() {
+    lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_self', 'read', function() {
       ps.withValueDo(req, res, mapID, key, function(valuedata, value, etag) {
         if (valuedata)
           lib.found(req, res, value, etag, makeValueURL(req, mapID, key), valuedata['Content-Type'])
@@ -170,7 +170,7 @@ function returnMap(req, res, map, mapID, etag) {
 }
 
 function getMap(req, res, mapID) {
-  lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'read', function() {
+  lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_self', 'read', function() {
     ps.withMapDo(req, res, mapID, function(map, etag) {
       returnMap(req, res, map, mapID, etag)
     })
@@ -179,7 +179,7 @@ function getMap(req, res, mapID) {
 
 function deleteMap(req, res, mapID) {
   var mapURL = makeMapURL(req, mapID)
-  lib.ifAllowedThen(req, res, mapURL, '_resource', 'delete', function() {
+  lib.ifAllowedThen(req, res, mapURL, '_self', 'delete', function() {
     ps.deleteMapThen(req, res, mapID, function (map, etag) {
       var permissionsURL = `/permissions?${mapURL}`
       lib.sendInternalRequest(req, res, permissionsURL, 'DELETE', null, function (clientRes) {
@@ -195,7 +195,7 @@ function deleteMap(req, res, mapID) {
 }
 
 function updateMap(req, res, mapID, patch) {
-  lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'update', function() {
+  lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_self', 'update', function() {
     ps.withMapDo(req, res, mapID, function(map) {
       securedUpdateMap(req, res, mapID, map, patch)
     })
@@ -214,13 +214,13 @@ function securedUpdateMap(req, res, mapID, map, patch) {
       if (namespace === undefined)
         primUpdateMap()
       else
-        lib.ifAllowedThen(req, res, `/namespaces;${namespace}`, '_resource', 'create', primUpdateMap)        
+        lib.ifAllowedThen(req, res, `/namespaces;${namespace}`, '_self', 'create', primUpdateMap)        
     })
   })  
 }
 
 function getEntry(req, res, mapID, key) {
-  lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'read', function(map) {
+  lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_self', 'read', function(map) {
     ps.withEntryDo(req, res, mapID, key, function (entry, etag) {
       entry = addCalculatedEntryProperties(req, entry, mapID, key)
       lib.found(req, res, entry, etag, entry.self)
@@ -229,7 +229,7 @@ function getEntry(req, res, mapID, key) {
 }
 
 function deleteEntry(req, res, mapID, key) {
-  lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'delete', function(map) {
+  lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_self', 'delete', function(map) {
     ps.deleteEntryThen(req, res, mapID, key, function (entry, etag) {
       entry = addCalculatedEntryProperties(req, entry, mapID, key)
       lib.found(req, res, entry, etag, entry.self)
@@ -238,7 +238,7 @@ function deleteEntry(req, res, mapID, key) {
 }
 
 function updateEntry(req, res, mapID, key, patch) {
-  lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'update', function() {
+  lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_self', 'update', function() {
     ps.withEntryDo(req, res, mapID, key, function(entry, etag) {
       lib.applyPatch(req, res, entry || {}, patch, function(patchedEntry) {
         ps.updateEntryThen(req, res, mapID, key, patchedEntry, function (etag) {
@@ -251,10 +251,11 @@ function updateEntry(req, res, mapID, key, patch) {
 }
 
 function getEntries(req, res, mapID) {
-  lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_resource', 'read', function(map) {
+  lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_self', 'read', function(map) {
     ps.withEntriesDo(req, res, mapID, function (entries) {
       var apiEntries = entries.map(x=>{
-        x.entrydata.etag = x.etag
+        var entrydata = x.entrydata || {}
+        entrydata.etag = x.etag
         return addCalculatedEntryProperties(req, x.entrydata, x.mapid, x.key)
       }) 
       lib.found(req, res, {isA: 'Collection', self: '//' + req.headers.host + req.url, contents: apiEntries});
