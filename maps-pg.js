@@ -166,23 +166,19 @@ function updateMapThen(id, patchedMap, callback) {
   });
 }
 
-function executeQuery(query, callback) {
-  pool.query(query, function(err, pgResult) {
-    if(err) 
-      console.error(`error executing query ${query}`, err);
-    callback();
-  });
-}
-
 function init(callback) {
   var query = 'CREATE TABLE IF NOT EXISTS maps (id text primary key, etag text, data jsonb);'
-  executeQuery(query, function() {
-    var query = 'CREATE TABLE IF NOT EXISTS values (mapid text, key text, etag text, entrydata jsonb, valuedata jsonb, value bytea, PRIMARY KEY (mapid, key));'
-    executeQuery(query, function() {
-      console.log('maps-db: connected to PG, config: ', config);
-      callback();
-    });
-  });
+  pool.query(query, function(err, pgResult) {
+    if(err) 
+      console.error(`error executing query ${query}`, err)
+    query = 'CREATE TABLE IF NOT EXISTS values (mapid text, key text, etag text, entrydata jsonb, valuedata jsonb, value bytea, PRIMARY KEY (mapid, key));'
+    pool.query(query, function(err, pgResult) {
+      if(err) 
+        console.error(`error executing query ${query}`, err)
+      console.log('maps-db: connected to PG, config: ', config)
+      callback()
+    })
+  })
 }
 
 process.on('unhandledRejection', function(e) {
