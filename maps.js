@@ -2,7 +2,6 @@
 var http = require('http')
 var url = require('url')
 var lib = require('http-helper-functions')
-var uuid = require('node-uuid')
 var ps = require('./maps-persistence.js')
 
 var MAPS    = '/bWFw-'
@@ -51,7 +50,7 @@ function createMap(req, res, map) {
     var permissions = map.permissions
     if (permissions !== undefined)
       delete map.permissions
-    var mapID = uuid()
+    var mapID = lib.uuid4()
     var selfURL = makeMapURL(req, mapID)
     lib.createPermissonsFor(req, res, selfURL, permissions, function(permissionsURL, permissions){
       // Create permissions first. If we fail after creating the permissions resource but before creating the main resource, 
