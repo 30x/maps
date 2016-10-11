@@ -229,7 +229,7 @@ function securedUpdateMap(req, res, mapID, map, patch) {
 }
 
 function getEntry(req, res, mapID, key) {
-  lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_self', 'read', function(map) {
+  lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_self', 'read', function() {
     ps.withEntryDo(req, res, mapID, key, function (entry, etag) {
       entry = addCalculatedEntryProperties(req, entry, mapID, key)
       lib.found(req, res, entry, etag, entry.self)
@@ -238,7 +238,7 @@ function getEntry(req, res, mapID, key) {
 }
 
 function deleteEntry(req, res, mapID, key) {
-  lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_self', 'delete', function(map) {
+  lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_self', 'delete', function() {
     ps.deleteEntryThen(req, res, mapID, key, function (entry, etag) {
       entry = addCalculatedEntryProperties(req, entry, mapID, key)
       lib.found(req, res, entry, etag, entry.self)
@@ -260,7 +260,7 @@ function updateEntry(req, res, mapID, key, patch) {
 }
 
 function getEntries(req, res, mapID) {
-  lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_self', 'read', function(map) {
+  lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_self', 'read', function() {
     ps.withEntriesDo(req, res, mapID, function (entries) {
       var apiEntries = entries.map(x=>{
         var entrydata = x.entrydata || {}
