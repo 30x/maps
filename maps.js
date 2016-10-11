@@ -23,7 +23,7 @@ function verifyMapName(req, res, user, map, callback) {
           else
             lib.duplicate(res, `duplicate map name ${map.namespace}:${map.name}`)
         else {// not already there
-          callback(map.namespace, map.name)}
+          callback()}
       })
 }
 
@@ -80,11 +80,11 @@ function createMap(req, res, map) {
     if (err !== null) 
       lib.badRequest(res, err)
     else
-      verifyMapName(req, res, user, map, function(namespace, name) {
-        if (namespace === undefined)
+      verifyMapName(req, res, user, map, function() {
+        if (map.namespace === undefined)
           primCreateMap()
         else
-          lib.ifAllowedThen(req, res, `/namespaces;${namespace}`, '_self', 'create', primCreateMap)
+          lib.ifAllowedThen(req, res, `/namespaces;${map.namespace}`, '_self', 'create', primCreateMap)
       })
   }
 }
@@ -219,11 +219,11 @@ function securedUpdateMap(req, res, mapID, map, patch) {
         lib.found(req, res, patchedMap, etag);
       })    
     }
-    verifyMapName(req, res, lib.getUser(req), map, function(namespace, name) {
-      if (namespace === undefined)
+    verifyMapName(req, res, lib.getUser(req), map, function() {
+      if (map.namespace === undefined)
         primUpdateMap()
       else
-        lib.ifAllowedThen(req, res, `/namespaces;${namespace}`, '_self', 'create', primUpdateMap)        
+        lib.ifAllowedThen(req, res, `/namespaces;${map.namespace}`, '_self', 'create', primUpdateMap)        
     })
   })  
 }
@@ -372,7 +372,6 @@ function requestHandler(req, res) {
       let mapFullName = splitPath[1].substring('maps;'.length)
       getMapName(req, res, mapFullName, function(name) {
         ps.withMapByNameDo(req, res, name, function(map, mapID, etag) {
-          console.log(mapID)
           handleMapPaths(splitPath, mapID)
         })
       })
