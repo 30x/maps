@@ -19,6 +19,24 @@ function withErrorHandling(req, res, callback) {
   }
 }
 
+function retryByName(func, req, res, mapID) {
+  var funcArgs = Array.prototype.slice.call(arguments, 3, -1) // first is the function, second is req, third is res, last is the callback
+  var callback = arguments[arguments.length - 1]
+  function retryFunction(err) {
+    if (err = 404)
+      db.withMapByNameDo(mapID, function(err, data, mapID, etag) {
+        if (err == 404)
+          lib.notFound(req, res)
+        else if (err)
+          lib.internalError(res, err)
+        else {
+          func.apply(funcArgs.concat(withErrorHandling(req, res, callback)))
+        }
+      })
+  }
+  func.apply(this, funcArgs.concat(retryFunction))
+}
+
 function createMapThen(req, res, mapID, selfURL, map, callback) {
   lib.internalizeURLs(map, req.headers.host);
   db.createMapThen(mapID, map, withErrorHandling(req, res, callback)) 
@@ -46,8 +64,8 @@ function withValueDo(req, res, mapID, key, callback) {
   db.withValueDo(mapID, key, withErrorHandling(req, res, callback));
 }
 
-function withMapByNameDo(req, res, ns, name, callback) {
-  db.withMapByNameDo(ns, name, withErrorHandling(req, res, callback));
+function withMapByNameDo(req, res, name, callback) {
+  db.withMapByNameDo(name, withErrorHandling(req, res, callback));
 }
 
 function withEntriesDo(req, res, mapID, callback) {

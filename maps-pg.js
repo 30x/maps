@@ -79,8 +79,9 @@ function withValueDo(mapID, key, callback) {
   })
 }
 
-function withMapByNameDo(ns, name, callback) {
-  pool.query(`SELECT id, etag, data FROM maps WHERE data @> '{"namespace": "${ns}", "name": "${name}"}'`, function (err, pg_res) {
+function withMapByNameDo(compoundName, callback) {
+  let [ns, scope, name] = compoundName.split(':')
+  pool.query(`SELECT id, etag, data FROM maps WHERE data @> '{"namespace": "${ns}", "scope": "${scope}", "name": "${name}"}'`, function (err, pg_res) {
     if (err) 
       callback(err)
     else if (pg_res.rowCount === 0) 

@@ -9,11 +9,14 @@ var ENTRIES = '/ZW50-'
 var VALUES  = '/dmFs-'
 
 function verifyMapName(req, res, user, map, callback) {
-  if (!(map.name === undefined && map.namespace === undefined)) // named map
+  map.scope = map.scope || ''
+  if (map.name === undefined && map.namespace === undefined) // unnamed map
+    callback()
+  else
     if (map.name === undefined || map.namespace === undefined)
       lib.badRequest(res, `must provide both name and namespace or neither. name: ${map.name} namespace: ${map.namespace}`)
     else // both parts of the name present
-      ps.db.withMapByNameDo(map.namespace, map.name, function(err, map) {
+      ps.db.withMapByNameDo(map.namespace + ':' + map.scope + ':' + map.name, function(err, map) {
         if (err != 404) 
           if (err)
             lib.badRequest(res, `unable to check for map name collision. err: ${err}`)
@@ -22,8 +25,6 @@ function verifyMapName(req, res, user, map, callback) {
         else {// not already there
           callback(map.namespace, map.name)}
       })
-  else
-    callback()  
 }
 
 function verifyMap(req, map, user, callback) {
@@ -35,6 +36,15 @@ function verifyMap(req, map, user, callback) {
 
 function makeMapURL(req, mapID) {
   return `//${req.headers.host}${MAPS}${mapID}`
+}
+
+function makeMapID(map) {
+  if (map.namespace)
+    return map.namespace + ':' + (map.subnamespace || '') + ':' + map.name
+  else {
+    var mapID = lib.uuid4().split('-')
+    return mapID[0] + ':' + mapID[1] + ':' + mapID[2] + '-' + mapID[3]
+  }
 }
 
 function addCalculatedMapProperties(req, map, selfURL) {
@@ -50,7 +60,7 @@ function createMap(req, res, map) {
     var permissions = map.permissions
     if (permissions !== undefined)
       delete map.permissions
-    var mapID = lib.uuid4()
+    var mapID = makeMapID(map)
     var selfURL = makeMapURL(req, mapID)
     lib.createPermissonsFor(req, res, selfURL, permissions, function(permissionsURL, permissions){
       // Create permissions first. If we fail after creating the permissions resource but before creating the main resource, 
@@ -262,13 +272,22 @@ function getEntries(req, res, mapID) {
   });
 }
 
-function getNameParts(req, res, mapFullName, callback) {
+function getIDParts(req, res, mapFullName, callback) {
   let splitID = mapFullName.split(':')
-  if (splitID.length == 2) {
-    let [part1, part2] = splitID
-    callback(part1, part2)
+  if (splitID.length == 4) {
+    callback(splitID[0] + ':' + splitID[1] + ':' + splitID[2], splitID[3])
   } else
-    lib.badRequest(res, `name must be composed of two simple names separated by a ":" (${mapFullName})`)
+    lib.badRequest(res, `ID must be composed of 4 parts separated by ":"s (${mapFullName})`)
+}
+
+function getMapName(req, res, mapFullName, callback) {
+  let splitID = mapFullName.split(':')
+  if (splitID.length == 2)
+    callback(splitID[0] + ':' + '' + ':' + splitID[1])
+  else if (splitID.length == 3)
+    callback(splitID[0] + ':' + splitID[1] + ':' + splitID[2])
+  else
+    lib.badRequest(res, `name must be composed of 2 or 3 parts separated by ":"s (${mapFullName})`)
 }
 
 function requestHandler(req, res) {
@@ -299,7 +318,7 @@ function requestHandler(req, res) {
       getEntry(req, res, mapID, key)
     else if (req.method == 'PATCH')
       lib.getServerPostBuffer(req, res, function(req, res, value) {
-        upsertVupdateEntryalue(req, res, mapID, key, value) 
+        updateEntry(req, res, mapID, key, value) 
       })
     else if (req.method == 'DELETE') 
       deleteEntry(req, res, mapID, key)
@@ -343,22 +362,17 @@ function requestHandler(req, res) {
     } else if (req_url.pathname.lastIndexOf(ENTRIES, 0) > -1) { /* url of form /ENTRIES-mapID:{key} */
       let splitPath = req_url.pathname.split('/')
       let entryID = splitPath[1].substring(ENTRIES.length-1)
-      if (splitPath.length == 2)
-        getNameParts(req, res, entryID, handleEntryMethods)
-      else  
-        lib.notFound(req, res)      
+      getIDParts(req, res, entryID, handleEntryMethods)
     } else if (req_url.pathname.lastIndexOf(VALUES, 0) > -1) { /* url of form /VALUES-mapID:{key} */
       let splitPath = req_url.pathname.split('/')
       let valueID = splitPath[1].substring(VALUES.length-1)
-      if (splitPath.length == 2)
-        getNameParts(req, res, valueID, handleValueMethods)
-      else  
-        lib.notFound(req, res)      
-    } else if (req_url.pathname.lastIndexOf('/maps;', 0) > -1) { /* url of form /maps;ns:name?????? */
+      getIDParts(req, res, valueID, handleValueMethods)
+    } else if (req_url.pathname.lastIndexOf('/maps;', 0) > -1) { /* url of form /maps;ns:scope:name?????? */
       let splitPath = req_url.pathname.split('/')
       let mapFullName = splitPath[1].substring('maps;'.length)
-      getNameParts(req, res, mapFullName, function(ns, name) {
-        ps.withMapByNameDo(req, res, ns, name, function(map, mapID, etag) {
+      getMapName(req, res, mapFullName, function(name) {
+        ps.withMapByNameDo(req, res, name, function(map, mapID, etag) {
+          console.log(mapID)
           handleMapPaths(splitPath, mapID)
         })
       })
