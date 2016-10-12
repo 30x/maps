@@ -12,19 +12,20 @@ function verifyMapName(req, res, user, map, callback) {
   map.scope = map.scope || ''
   if (map.name === undefined && map.namespace === undefined) // unnamed map
     callback()
-  else
-    if (map.name === undefined || map.namespace === undefined)
-      lib.badRequest(res, `must provide both name and namespace or neither. name: ${map.name} namespace: ${map.namespace}`)
-    else // both parts of the name present
-      ps.db.withMapByNameDo(map.namespace + ':' + map.scope + ':' + map.name, function(err, map) {
-        if (err != 404) 
-          if (err)
-            lib.badRequest(res, `unable to check for map name collision. err: ${err}`)
-          else
-            lib.duplicate(res, `duplicate map name ${map.namespace}:${map.name}`)
-        else {// not already there
-          callback()}
-      })
+  else if (map.name === undefined || map.namespace === undefined)
+    lib.badRequest(res, `must provide both name and namespace or neither. name: ${map.name} namespace: ${map.namespace}`)
+  else{ // both parts of the name present
+    ps.db.withMapDo(map.namespace + ':' + map.scope + ':' + map.name, function (err, map) {
+      if (err != 404) {
+        if (err)
+          lib.badRequest(res, `unable to check for map name collision. err: ${err}`)
+        else
+          lib.duplicate(res, `duplicate map name ${map.namespace}:${map.name}`)
+      }
+      else// not already there
+        callback()
+    })
+  }
 }
 
 function verifyMap(req, map, user, callback) {
@@ -79,13 +80,14 @@ function createMap(req, res, map) {
     var err = verifyMap(req, map, user)
     if (err !== null) 
       lib.badRequest(res, err)
-    else
-      verifyMapName(req, res, user, map, function() {
+    else {
+      verifyMapName(req, res, user, map, function () {
         if (map.namespace === undefined)
           primCreateMap()
         else
           lib.ifAllowedThen(req, res, `/namespaces;${map.namespace}`, '_self', 'create', primCreateMap)
       })
+    }
   }
 }
 
@@ -302,9 +304,9 @@ function requestHandler(req, res) {
       lib.methodNotAllowed(req, res, ['GET', 'POST'])  
   }
   function handleMapMethods(mapID) {
-    if (req.method == 'GET') 
+    if (req.method == 'GET')
       getMap(req, res, mapID);
-    else if (req.method == 'DELETE') 
+    else if (req.method == 'DELETE')
       deleteMap(req, res, mapID);
     else if (req.method == 'PATCH') 
       lib.getServerPostObject(req, res, function (req, res, jso) {
@@ -349,11 +351,12 @@ function requestHandler(req, res) {
     else
       lib.notFound(req, res)  
   }
-  if (req.url == '/maps') 
+  if (req.url == '/maps') {
     if (req.method == 'POST')
       lib.getServerPostObject(req, res, createMap)
     else
       lib.methodNotAllowed(req, res, ['POST'])
+  }
   else {
     var req_url = url.parse(req.url);
     if (req_url.pathname.lastIndexOf(MAPS, 0) > -1) { /* url of form /MAPS-xxxxxx */
@@ -371,8 +374,8 @@ function requestHandler(req, res) {
       let splitPath = req_url.pathname.split('/')
       let mapFullName = splitPath[1].substring('maps;'.length)
       getMapName(req, res, mapFullName, function(name) {
-        ps.withMapByNameDo(req, res, name, function(map, mapID, etag) {
-          handleMapPaths(splitPath, mapID)
+        ps.withMapDo(req, res, name, function(map, etag) { // todo align mapID returned from PG and CASS so we can use it
+          handleMapPaths(splitPath, name)
         })
       })
     } else 

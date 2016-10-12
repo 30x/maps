@@ -4,9 +4,7 @@ var db;
 if( process.env.DBMS === 'pg')
   db = require('./maps-pg.js')
 else
-  db = require('./maps-cass.js')
-
-var lib = require('http-helper-functions')
+  db = require('./maps-cass-cps.js')
 
 function withErrorHandling(req, res, callback) {
   return function (err) {
@@ -17,24 +15,6 @@ function withErrorHandling(req, res, callback) {
     else 
       callback.apply(this, Array.prototype.slice.call(arguments, 1))
   }
-}
-
-function retryByName(func, req, res, mapID) {
-  var funcArgs = Array.prototype.slice.call(arguments, 3, -1) // first is the function, second is req, third is res, last is the callback
-  var callback = arguments[arguments.length - 1]
-  function retryFunction(err) {
-    if (err = 404)
-      db.withMapByNameDo(mapID, function(err, data, mapID, etag) {
-        if (err == 404)
-          lib.notFound(req, res)
-        else if (err)
-          lib.internalError(res, err)
-        else {
-          func.apply(funcArgs.concat(withErrorHandling(req, res, callback)))
-        }
-      })
-  }
-  func.apply(this, funcArgs.concat(retryFunction))
 }
 
 function createMapThen(req, res, mapID, selfURL, map, callback) {
