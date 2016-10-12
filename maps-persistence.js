@@ -17,6 +17,10 @@ function withErrorHandling(req, res, callback) {
   }
 }
 
+function makeMapID(req, res, map, callback) {
+  db.makeMapID(map, withErrorHandling(req, res, callback))   
+}
+
 function createMapThen(req, res, mapID, selfURL, map, callback) {
   lib.internalizeURLs(map, req.headers.host);
   db.createMapThen(mapID, map, withErrorHandling(req, res, callback)) 
@@ -44,8 +48,8 @@ function withValueDo(req, res, mapID, key, callback) {
   db.withValueDo(mapID, key, withErrorHandling(req, res, callback));
 }
 
-function withMapByNameDo(req, res, name, callback) {
-  db.withMapByNameDo(name, withErrorHandling(req, res, callback));
+function withMapByQueryDo(req, res, name, callback) {
+  db.withMapByQueryDo(name, withErrorHandling(req, res, callback));
 }
 
 function withEntriesDo(req, res, mapID, callback) {
@@ -74,7 +78,8 @@ exports.createEntryThen = createEntryThen
 exports.upsertValueThen = upsertValueThen
 exports.withEntriesDo = withEntriesDo
 exports.withEntryDo=withEntryDo
-exports.withMapByNameDo = withMapByNameDo
+exports.withMapByQueryDo = withMapByQueryDo
 exports.withValueDo = withValueDo
+exports.makeMapID = makeMapID
 exports.db=db
 exports.init = init

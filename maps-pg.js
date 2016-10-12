@@ -11,6 +11,31 @@ var config = {
 
 var pool = new Pool(config);
 
+// The following function adapted from https://github.com/broofa/node-uuid4 under MIT License
+// Copyright (c) 2010-2012 Robert Kieffer
+const randomBytes = require('crypto').randomBytes
+const toHex = Array(256)
+for (var val = 0; val < 256; val++) 
+  toHex[val] = (val + 0x100).toString(16).substr(1)
+
+function makeMapID(map, callback) {
+  var buf = randomBytes(16)
+  buf[6] = (buf[6] & 0x0f) | 0x40
+  buf[8] = (buf[8] & 0x3f) | 0x80
+  var i=0
+  callback(null,
+    toHex[buf[i++]] + toHex[buf[i++]] +
+    toHex[buf[i++]] + toHex[buf[i++]] + ':' +
+    toHex[buf[i++]] + toHex[buf[i++]] + ':' +
+    toHex[buf[i++]] + toHex[buf[i++]] + ':' +
+    toHex[buf[i++]] + toHex[buf[i++]] + ':' +
+    toHex[buf[i++]] + toHex[buf[i++]] + ':' +
+    toHex[buf[i++]] + toHex[buf[i++]] + ':' +
+    toHex[buf[i++]] + toHex[buf[i++]]
+  )
+}
+// End of section of code adapted from https://github.com/broofa/node-uuid4 under MIT License
+
 function createMapThen(id, map, callback) {
   var etag = uuid()
   var query = `INSERT INTO maps (id, etag, data) values('${id}', '${etag}', '${JSON.stringify(map)}')`;
@@ -79,18 +104,21 @@ function withValueDo(mapID, key, callback) {
   })
 }
 
-function withMapByNameDo(compoundName, callback) {
-  let [ns, scope, name] = compoundName.split(':')
-  pool.query(`SELECT id, etag, data FROM maps WHERE data @> '{"namespace": "${ns}", "scope": "${scope}", "name": "${name}"}'`, function (err, pg_res) {
-    if (err) 
-      callback(err)
-    else if (pg_res.rowCount === 0) 
-      callback(404)
-    else {
-      var row = pg_res.rows[0];
-      callback(null, row.data, row.id, row.etag);
-    }
-  })
+function withMapByQueryDo(compoundName, callback) {
+  var parts = compoundName.split(':')
+  if (parts.length < 2)
+    calback(400)
+  else
+    pool.query(`SELECT id, etag, data FROM maps WHERE data @> '{"namespace": "${parts[0]}", "scope": "${parts.slice(1,-1).join(':')}", "name": "${parts[parts.length - 1]}"}'`, function (err, pg_res) {
+      if (err) 
+        callback(err)
+      else if (pg_res.rowCount === 0)
+        callback(404)
+      else {
+        var row = pg_res.rows[0];
+        callback(null, row.data, row.id, row.etag);
+      }
+    })
 }
 
 function withEntriesDo(mapid, callback) {
@@ -194,6 +222,7 @@ exports.createEntryThen = createEntryThen
 exports.upsertValueThen = upsertValueThen
 exports.withEntriesDo = withEntriesDo
 exports.withEntryDo = withEntryDo
-exports.withMapByNameDo = withMapByNameDo
+exports.withMapByQueryDo = withMapByQueryDo
 exports.withValueDo = withValueDo
+exports.makeMapID = makeMapID
 exports.init = init

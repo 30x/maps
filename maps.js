@@ -15,7 +15,7 @@ function verifyMapName(req, res, user, map, callback) {
   else if (map.name === undefined || map.namespace === undefined)
     lib.badRequest(res, `must provide both name and namespace or neither. name: ${map.name} namespace: ${map.namespace}`)
   else{ // both parts of the name present
-    ps.db.withMapDo(map.namespace + ':' + map.scope + ':' + map.name, function (err, map) {
+    ps.db.withMapByQueryDo(map.namespace + ':' + map.scope + ':' + map.name, function (err, map) {
       if (err != 404) {
         if (err)
           lib.badRequest(res, `unable to check for map name collision. err: ${err}`)
@@ -39,15 +39,6 @@ function makeMapURL(req, mapID) {
   return `//${req.headers.host}${MAPS}${mapID}`
 }
 
-function makeMapID(map) {
-  if (map.namespace)
-    return map.namespace + ':' + (map.subnamespace || '') + ':' + map.name
-  else {
-    var mapID = lib.uuid4().split('-')
-    return mapID[0] + ':' + mapID[1] + ':' + mapID[2] + '-' + mapID[3]
-  }
-}
-
 function addCalculatedMapProperties(req, map, selfURL) {
   map.self = selfURL; 
   map.entries = `${selfURL}/entries`
@@ -61,17 +52,18 @@ function createMap(req, res, map) {
     var permissions = map.permissions
     if (permissions !== undefined)
       delete map.permissions
-    var mapID = makeMapID(map)
-    var selfURL = makeMapURL(req, mapID)
-    lib.createPermissonsFor(req, res, selfURL, permissions, function(permissionsURL, permissions){
-      // Create permissions first. If we fail after creating the permissions resource but before creating the main resource, 
-      // there will be a useless but harmless permissions document.
-      // If we do things the other way around, a map without matching permissions could cause problems.
-      ps.createMapThen(req, res, mapID, selfURL, map, function(etag) {
-        addCalculatedMapProperties(req, map, selfURL)
-        lib.created(req, res, map, map.self, etag)
-      })
-    })    
+    ps.makeMapID(req, res, map, function(mapID) {
+      var selfURL = makeMapURL(req, mapID)
+      lib.createPermissonsFor(req, res, selfURL, permissions, function(permissionsURL, permissions){
+        // Create permissions first. If we fail after creating the permissions resource but before creating the main resource, 
+        // there will be a useless but harmless permissions document.
+        // If we do things the other way around, a map without matching permissions could cause problems.
+        ps.createMapThen(req, res, mapID, selfURL, map, function(etag) {
+          addCalculatedMapProperties(req, map, selfURL)
+          lib.created(req, res, map, map.self, etag)
+        })
+      })    
+    })
   }
   var user = lib.getUser(req)
   if (user == null)
@@ -276,12 +268,12 @@ function getEntries(req, res, mapID) {
 
 function getIDParts(req, res, mapFullName, callback) {
   var splitID = mapFullName.split(':')
-  if (splitID.length > 2) {
+  if (splitID.length > 1) {
     var mapID = splitID.slice(0,-1).join(':')
     var key = splitID[splitID.length - 1]
     callback(mapID, key)
   } else
-    lib.badRequest(res, `ID must be composed of at least 3 parts separated by ":"s (${mapFullName})`)
+    lib.badRequest(res, `ID must be composed of at least 2 parts separated by ":"s (${mapFullName})`)
 }
 
 function getMapName(req, res, mapFullName, callback) {
@@ -374,16 +366,15 @@ function requestHandler(req, res) {
       getIDParts(req, res, valueID, handleValueMethods)
     } else if (req_url.pathname.lastIndexOf('/maps;', 0) > -1) { /* url of form /maps;ns:scope:name?????? */
       let splitPath = req_url.pathname.split('/')
-      let mapFullName = splitPath[1].substring('maps;'.length)
-      getMapName(req, res, mapFullName, function(name) {
-        ps.withMapDo(req, res, name, function(map, etag) { // todo align mapID returned from PG and CASS so we can use it
-          handleMapPaths(splitPath, name)
-        })
+      let query = splitPath[1].substring('maps;'.length)
+      ps.withMapByQueryDo(req, res, query, function(map, mapID, etag) { // todo align mapID returned from PG and CASS so we can use it
+        handleMapPaths(splitPath, mapID)
       })
-    } else 
+    } else
       lib.notFound(req, res)
   }
 }
+
 ps.init(function(){
   var port = process.env.PORT;
   http.createServer(requestHandler).listen(port, function() {
