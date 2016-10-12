@@ -273,11 +273,13 @@ function getEntries(req, res, mapID) {
 }
 
 function getIDParts(req, res, mapFullName, callback) {
-  let splitID = mapFullName.split(':')
-  if (splitID.length == 4) {
-    callback(splitID[0] + ':' + splitID[1] + ':' + splitID[2], splitID[3])
+  var splitID = mapFullName.split(':')
+  if (splitID.length > 2) {
+    var mapID = splitID.slice(0,-1).join(':')
+    var key = splitID[splitID.length - 1]
+    callback(mapID, key)
   } else
-    lib.badRequest(res, `ID must be composed of 4 parts separated by ":"s (${mapFullName})`)
+    lib.badRequest(res, `ID must be composed of at least 3 parts separated by ":"s (${mapFullName})`)
 }
 
 function getMapName(req, res, mapFullName, callback) {
