@@ -1,8 +1,9 @@
 'use strict';
-var http = require('http')
-var url = require('url')
-var lib = require('http-helper-functions')
-var ps = require('./maps-persistence.js')
+const http = require('http')
+const url = require('url')
+const lib = require('http-helper-functions')
+const pLib = require('permissions-helper-functions')
+const ps = require('./maps-persistence.js')
 
 var MAPS    = '/bWFw-'
 var ENTRIES = '/ZW50-'
@@ -54,18 +55,27 @@ function createMap(req, res, map) {
       delete map.permissions
     ps.makeMapID(req, res, map, function(mapID) {
       var selfURL = makeMapURL(req, mapID)
-      lib.createPermissonsFor(req, res, selfURL, permissions, function(permissionsURL, permissions){
-        // Create permissions first. If we fail after creating the permissions resource but before creating the main resource, 
-        // there will be a useless but harmless permissions document.
-        // If we do things the other way around, a map without matching permissions could cause problems.
-        ps.createMapThen(req, res, mapID, selfURL, map, function(etag) {
-          addCalculatedMapProperties(req, map, selfURL)
-          lib.created(req, res, map, map.self, etag)
-        })
+      pLib.createPermissionsFor(req.headers, selfURL, permissions, function(err, permissionsURL, permissions){
+        if (err == 401)
+          lib.forbidden(req, res)
+        else if (err == 400)
+          lib.badRequest(res, permissionsURL)
+        else if (err == 500)
+          lib.internalError(res, permissionsURL)
+        else if (err == 403)
+          lib.forbidden(req, res)
+        else 
+          // Create permissions first. If we fail after creating the permissions resource but before creating the main resource, 
+          // there will be a useless but harmless permissions document.
+          // If we do things the other way around, a map without matching permissions could cause problems.
+          ps.createMapThen(req, res, mapID, selfURL, map, function(etag) {
+            addCalculatedMapProperties(req, map, selfURL)
+            lib.created(req, res, map, map.self, etag)
+          })
       })    
     })
   }
-  var user = lib.getUser(req)
+  var user = lib.getUser(req.headers.authorization)
   if (user == null)
     lib.unauthorized(req, res)
   else { 
@@ -77,7 +87,12 @@ function createMap(req, res, map) {
         if (map.namespace === undefined)
           primCreateMap()
         else
-          lib.ifAllowedThen(req, res, `/namespaces;${map.namespace}`, '_self', 'create', primCreateMap)
+          pLib.ifAllowedThen(req.headers, `/namespaces;${map.namespace}`, '_self', 'create', function(err, reason) {
+            if (err)
+              lib.internalError(res, reason)
+            else
+              primCreateMap()
+          })
       })
     }
   }
@@ -112,7 +127,7 @@ function addCalculatedEntryProperties(req, entry, mapID, key) {
 }
 
 function createEntry(req, res, mapID, entry) {
-  var user = lib.getUser(req)
+  var user = lib.getUser(req.headers.authorization)
   if (user == null)
     lib.unauthorized(req, res)
   else { 
@@ -121,28 +136,35 @@ function createEntry(req, res, mapID, entry) {
       lib.badRequest(res, err)
     else {
       lib.internalizeURLs(entry, req.headers.host)
-      lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_self', 'create', function() {
-        var key = entry.key
-        delete entry.key
-        ps.createEntryThen(req, res, mapID, key, entry, function(etag) {
-          addCalculatedEntryProperties(req, entry, mapID, key)
-          lib.created(req, res, entry, entry.self, etag)
-        })
+      pLib.ifAllowedThen(req.headers, makeMapURL(req, mapID), '_self', 'create', function(err, reason) {
+        if (err)
+          lib.internalError(res, reason)
+        else {
+          var key = entry.key
+          delete entry.key
+          ps.createEntryThen(req, res, mapID, key, entry, function(etag) {
+            addCalculatedEntryProperties(req, entry, mapID, key)
+            lib.created(req, res, entry, entry.self, etag)
+          })
+        }
       })
     } 
   }  
 }
 
 function upsertValue(req, res, mapID, key, value) {
-  var user = lib.getUser(req);
+  var user = lib.getUser(req.headers.authorization);
   if (user == null)
     lib.unauthorized(req, res)
   else {
     if (req.headers['content-type'] != null) {
-      lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_self', 'create', function() {
-        ps.upsertValueThen(req, res, mapID, key, value, function(etag) {
-          lib.found(req, res, null, etag, makeValueURL(req, mapID, key)) // Cassanda can't tell us if it was a create or an update, so we just pick one'
-        })
+      pLib.ifAllowedThen(req.headers, makeMapURL(req, mapID), '_self', 'create', function(err, reason) {
+        if (err)
+          lib.internalError(res, reason)
+        else
+          ps.upsertValueThen(req, res, mapID, key, value, function(etag) {
+            lib.found(req, res, null, etag, makeValueURL(req, mapID, key)) // Cassanda can't tell us if it was a create or an update, so we just pick one'
+          })
       })
     } else
       lib.badRequest(res, 'must provide Content-Type header')
@@ -150,17 +172,20 @@ function upsertValue(req, res, mapID, key, value) {
 }
 
 function getValue(req, res, mapID, key) {
-  var user = lib.getUser(req);
+  var user = lib.getUser(req.headers.authorization);
   if (user == null)
     lib.unauthorized(req, res);
   else
-    lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_self', 'read', function() {
-      ps.withValueDo(req, res, mapID, key, function(valuedata, value, etag) {
-        if (valuedata)
-          lib.found(req, res, value, etag, makeValueURL(req, mapID, key), valuedata['Content-Type'])
-        else
-          lib.notFound(req, res)
-      })
+    pLib.ifAllowedThen(req.headers, makeMapURL(req, mapID), '_self', 'read', function(err, reason) {
+      if (err)
+        lib.internalError(res, reason)
+      else
+        ps.withValueDo(req, res, mapID, key, function(valuedata, value, etag) {
+          if (valuedata)
+            lib.found(req, res, value, etag, makeValueURL(req, mapID, key), valuedata['Content-Type'])
+          else
+            lib.notFound(req, res)
+        })
     })
 }
 
@@ -173,38 +198,47 @@ function returnMap(req, res, map, mapID, etag) {
 }
 
 function getMap(req, res, mapID) {
-  lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_self', 'read', function() {
-    ps.withMapDo(req, res, mapID, function(map, etag) {
-      returnMap(req, res, map, mapID, etag)
-    })
+  pLib.ifAllowedThen(req.headers, makeMapURL(req, mapID), '_self', 'read', function(err, reason) {
+    if (err)
+      lib.internalError(res, reason)
+    else
+      ps.withMapDo(req, res, mapID, function(map, etag) {
+        returnMap(req, res, map, mapID, etag)
+      })
   })
 }
 
 function deleteMap(req, res, mapID) {
   var mapURL = makeMapURL(req, mapID)
-  lib.ifAllowedThen(req, res, mapURL, '_self', 'delete', function() {
-    ps.deleteMapThen(req, res, mapID, function (map, etag) {
-      var permissionsURL = `/permissions?${mapURL}`
-      lib.sendInternalRequest(req.headers, permissionsURL, 'DELETE', null, function (err, clientRes) {
-        if (err)
-          lib.internalError(res, err)
-        else
-          lib.getClientResponseBody(clientRes, function(body) {
-            if (clientRes.statusCode == 200)  
-              lib.found(req, res, map, etag)
-            else
-              lib.internalError(res, `failed to delete permissions: ${permissionsURL} status_code: ${clientRes.status_code} data: ${body}`);
-          })
+  pLib.ifAllowedThen(req.headers, mapURL, '_self', 'delete', function(err, reason) {
+    if (err)
+      lib.internalError(res, reason)
+    else
+      ps.deleteMapThen(req, res, mapID, function (map, etag) {
+        var permissionsURL = `/permissions?${mapURL}`
+        lib.sendInternalRequest(req.headers, permissionsURL, 'DELETE', null, function (err, clientRes) {
+          if (err)
+            lib.internalError(res, err)
+          else
+            lib.getClientResponseBody(clientRes, function(body) {
+              if (clientRes.statusCode == 200)  
+                lib.found(req, res, map, etag)
+              else
+                lib.internalError(res, `failed to delete permissions: ${permissionsURL} status_code: ${clientRes.status_code} data: ${body}`);
+            })
+        })
       })
-    })
   })
 }
 
 function updateMap(req, res, mapID, patch) {
-  lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_self', 'update', function() {
-    ps.withMapDo(req, res, mapID, function(map) {
-      securedUpdateMap(req, res, mapID, map, patch)
-    })
+  pLib.ifAllowedThen(req.headers, makeMapURL(req, mapID), '_self', 'update', function(err, reason) {
+    if (err)
+      lib.internalError(res, reason)
+    else
+      ps.withMapDo(req, res, mapID, function(map) {
+        securedUpdateMap(req, res, mapID, map, patch)
+      })
   })
 }
 
@@ -216,57 +250,74 @@ function securedUpdateMap(req, res, mapID, map, patch) {
         lib.found(req, res, patchedMap, etag);
       })    
     }
-    verifyMapName(req, res, lib.getUser(req), map, function() {
+    verifyMapName(req, res, lib.getUser(req.headers.authorization), map, function() {
       if (map.namespace === undefined)
         primUpdateMap()
       else
-        lib.ifAllowedThen(req, res, `/namespaces;${map.namespace}`, '_self', 'create', primUpdateMap)        
+        pLib.ifAllowedThen(req.headers, `/namespaces;${map.namespace}`, '_self', 'create', function(err, reason) {
+          if (err)
+            lib.internalError(res, reason)
+          else
+            primUpdateMap()
+        })
     })
   })  
 }
 
 function getEntry(req, res, mapID, key) {
-  lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_self', 'read', function() {
-    ps.withEntryDo(req, res, mapID, key, function (entry, etag) {
-      entry = addCalculatedEntryProperties(req, entry, mapID, key)
-      lib.found(req, res, entry, etag, entry.self)
-    });
+  pLib.ifAllowedThen(req.headers, makeMapURL(req, mapID), '_self', 'read', function(err, reason) {
+    if (err)
+      lib.internalError(res, reason)
+    else
+      ps.withEntryDo(req, res, mapID, key, function (entry, etag) {
+        entry = addCalculatedEntryProperties(req, entry, mapID, key)
+        lib.found(req, res, entry, etag, entry.self)
+      });
   });
 }
 
 function deleteEntry(req, res, mapID, key) {
-  lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_self', 'delete', function() {
-    ps.deleteEntryThen(req, res, mapID, key, function (entry, etag) {
-      entry = addCalculatedEntryProperties(req, entry, mapID, key)
-      lib.found(req, res, entry, etag, entry.self)
-    });
+  pLib.ifAllowedThen(req.headers, makeMapURL(req, mapID), '_self', 'delete', function(err, reason) {
+    if (err)
+      lib.internalError(res, reason)
+    else
+      ps.deleteEntryThen(req, res, mapID, key, function (entry, etag) {
+        entry = addCalculatedEntryProperties(req, entry, mapID, key)
+        lib.found(req, res, entry, etag, entry.self)
+      });
   });
 }
 
 function updateEntry(req, res, mapID, key, patch) {
-  lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_self', 'update', function() {
-    ps.withEntryDo(req, res, mapID, key, function(entry, etag) {
-      lib.applyPatch(req, res, entry || {}, patch, function(patchedEntry) {
-        ps.updateEntryThen(req, res, mapID, key, patchedEntry, function (etag) {
-          addCalculatedMapProperties(req, patchedMap, makeEntryURL(req, mapID, key)) 
-          lib.found(req, res, patchedMap, etag);
-        })
-      })    
-    })
+  pLib.ifAllowedThen(req.headers, makeMapURL(req, mapID), '_self', 'update', function(err, reason) {
+    if (err)
+      lib.internalError(res, reason)
+    else
+      ps.withEntryDo(req, res, mapID, key, function(entry, etag) {
+        lib.applyPatch(req, res, entry || {}, patch, function(patchedEntry) {
+          ps.updateEntryThen(req, res, mapID, key, patchedEntry, function (etag) {
+            addCalculatedMapProperties(req, patchedMap, makeEntryURL(req, mapID, key)) 
+            lib.found(req, res, patchedMap, etag);
+          })
+        })    
+      })
   })
 }
 
 function getEntries(req, res, mapID) {
-  lib.ifAllowedThen(req, res, makeMapURL(req, mapID), '_self', 'read', function() {
-    ps.withEntriesDo(req, res, mapID, function (entries) {
-      var apiEntries = entries.map(x=>{
-        var entrydata = x.entrydata || {}
-        entrydata.etag = x.etag
-        return addCalculatedEntryProperties(req, x.entrydata, x.mapid, x.key)
-      }) 
-      lib.found(req, res, {isA: 'Collection', self: '//' + req.headers.host + req.url, contents: apiEntries});
-    });
-  });
+  pLib.ifAllowedThen(req.headers, makeMapURL(req, mapID), '_self', 'read', function(err, reason) {
+    if (err)
+      lib.internalError(res, reason)
+    else
+      ps.withEntriesDo(req, res, mapID, function (entries) {
+        var apiEntries = entries.map(x=>{
+          var entrydata = x.entrydata || {}
+          entrydata.etag = x.etag
+          return addCalculatedEntryProperties(req, x.entrydata, x.mapid, x.key)
+        }) 
+        lib.found(req, res, {isA: 'Collection', self: '//' + req.headers.host + req.url, contents: apiEntries});
+      })
+  })
 }
 
 function getIDParts(req, res, mapFullName, callback) {
