@@ -1,2 +1,2 @@
 docker build -t maps .
-docker tag -f maps thirtyx/maps:0.0.1
+docker tag -f maps thirtyx/maps:0.0.2

@@ -48,8 +48,8 @@ function withValueDo(req, res, mapID, key, callback) {
   db.withValueDo(mapID, key, withErrorHandling(req, res, callback));
 }
 
-function withMapByQueryDo(req, res, name, callback) {
-  db.withMapByQueryDo(name, withErrorHandling(req, res, callback));
+function withMapFromNameDo(req, res, name, callback) {
+  db.withMapFromNameDo(name, withErrorHandling(req, res, callback));
 }
 
 function withEntriesDo(req, res, mapID, callback) {
@@ -78,7 +78,7 @@ exports.createEntryThen = createEntryThen
 exports.upsertValueThen = upsertValueThen
 exports.withEntriesDo = withEntriesDo
 exports.withEntryDo=withEntryDo
-exports.withMapByQueryDo = withMapByQueryDo
+exports.withMapFromNameDo = withMapFromNameDo
 exports.withValueDo = withValueDo
 exports.makeMapID = makeMapID
 exports.db=db

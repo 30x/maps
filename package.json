@@ -5,9 +5,9 @@
   "main": "maps.js",
   "dependencies": {
     "cassandra-driver": "^3.1.4",
-    "http-helper-functions": "^0.0.38",
+    "http-helper-functions": "^0.0.39",
     "node-uuid": "^1.4.7",
-    "permissions-helper-functions": "0.0.3",
+    "permissions-helper-functions": "0.0.4",
     "pg": "^6.0.3"
   },
   "devDependencies": {},

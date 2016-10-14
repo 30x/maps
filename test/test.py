@@ -45,7 +45,7 @@ def main():
 
     # DELETE map
 
-    map_url = urljoin(BASE_URL, '/maps;acme:nursery-rhymes')
+    map_url = urljoin(BASE_URL, '/mapFromName;acme:nursery-rhymes')
     headers = {'Authorization': 'Bearer %s' % TOKEN1}
     r = requests.delete(map_url, headers=headers)
     if r.status_code == 200:
@@ -180,11 +180,28 @@ def main():
         print 'failed to retrieve map entries %s %s %s' % (map_url, r.status_code, r.text)
         return
 
+    # POST namespace
+
+    namespace = {
+        'isA': 'Namespace',
+        'name': 'acme'
+        }
+
+    namespaces_url = urljoin(BASE_URL, '/namespaces') 
+    
+    headers = {'Content-Type': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
+    r = requests.post(namespaces_url, headers=headers, json=namespace)
+    if r.status_code == 201:
+        print 'correctly created namespace %s ' % (r.headers['Location'])
+        namespace_url = urljoin(BASE_URL, r.headers['Location'])
+    elif r.status_code == 409:
+        print 'namespace already exists'    
+    else:
+        print 'failed to create namespace %s %s %s' % (namespaces_url, r.status_code, r.text)
     # PATCH map
 
     patch = {
-        'name': 'nursery-rhymes',
-        'namespace': 'acme'
+        'name': 'acme:nursery-rhymes'
     }
         
     headers = {'Content-Type': 'application/merge-patch+json','Authorization': 'Bearer %s' % TOKEN1}
@@ -198,7 +215,7 @@ def main():
 
     # GET map by name
 
-    name_url = urljoin(BASE_URL, '/maps;acme:nursery-rhymes')
+    name_url = urljoin(BASE_URL, '/mapFromName;acme:nursery-rhymes')
     headers = {'Accept': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
     r = requests.get(name_url, headers=headers, json=map)
     if r.status_code == 200:
@@ -209,8 +226,7 @@ def main():
 
     map = {
         'isA': 'Map',
-        'name': 'nursery-rhymes',
-        'namespace': 'acme',
+        'name': 'acme:nursery-rhymes',
         'test-data': True
         }
 
@@ -226,7 +242,7 @@ def main():
 
     # GET entries by map name
 
-    entries_url = urljoin(BASE_URL, '/maps;acme:nursery-rhymes/entries')
+    entries_url = urljoin(BASE_URL, '/mapFromName;acme:nursery-rhymes/entries')
     headers = {'Accept': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
     r = requests.get(entries_url, headers=headers, json=map)
     if r.status_code == 200:
@@ -241,7 +257,7 @@ def main():
 
     # GET entry by map name and key
 
-    entry_url = urljoin(BASE_URL, '/maps;acme:nursery-rhymes/entries;HumptyDumpty')
+    entry_url = urljoin(BASE_URL, '/mapFromName;acme:nursery-rhymes/entries;HumptyDumpty')
     headers = {'Accept': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
     r = requests.get(entry_url, headers=headers, json=map)
     if r.status_code == 200:
@@ -252,7 +268,7 @@ def main():
 
     # GET value by map name and key
 
-    value_url = urljoin(BASE_URL, '/maps;acme:nursery-rhymes/entries;HumptyDumpty/value')
+    value_url = urljoin(BASE_URL, '/mapFromName;acme:nursery-rhymes/entries;HumptyDumpty/value')
     headers = {'Authorization': 'Bearer %s' % TOKEN1}
     r = requests.get(value_url, headers=headers, json=map)
     if r.status_code == 200:

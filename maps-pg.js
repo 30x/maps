@@ -104,21 +104,17 @@ function withValueDo(mapID, key, callback) {
   })
 }
 
-function withMapByQueryDo(compoundName, callback) {
-  var parts = compoundName.split(':')
-  if (parts.length < 2)
-    calback(400)
-  else
-    pool.query(`SELECT id, etag, data FROM maps WHERE data @> '{"namespace": "${parts[0]}", "scope": "${parts.slice(1,-1).join(':')}", "name": "${parts[parts.length - 1]}"}'`, function (err, pg_res) {
-      if (err) 
-        callback(err)
-      else if (pg_res.rowCount === 0)
-        callback(404)
-      else {
-        var row = pg_res.rows[0];
-        callback(null, row.data, row.id, row.etag);
-      }
-    })
+function withMapFromNameDo(name, callback) {
+  pool.query(`SELECT id, etag, data FROM maps WHERE data @> '{"name": "${name}"}'`, function (err, pg_res) {
+    if (err) 
+      callback(err)
+    else if (pg_res.rowCount === 0)
+      callback(404)
+    else {
+      var row = pg_res.rows[0];
+      callback(null, row.data, row.id, row.etag);
+    }
+  })
 }
 
 function withEntriesDo(mapid, callback) {
@@ -222,7 +218,7 @@ exports.createEntryThen = createEntryThen
 exports.upsertValueThen = upsertValueThen
 exports.withEntriesDo = withEntriesDo
 exports.withEntryDo = withEntryDo
-exports.withMapByQueryDo = withMapByQueryDo
+exports.withMapFromNameDo = withMapFromNameDo
 exports.withValueDo = withValueDo
 exports.makeMapID = makeMapID
 exports.init = init

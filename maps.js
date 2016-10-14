@@ -10,23 +10,27 @@ var ENTRIES = '/ZW50-'
 var VALUES  = '/dmFs-'
 
 function verifyMapName(req, res, user, map, callback) {
-  map.scope = map.scope || ''
-  if (map.name === undefined && map.namespace === undefined) // unnamed map
+  if (map.name === undefined) // unnamed map
     callback()
-  else if (map.name === undefined || map.namespace === undefined)
-    lib.badRequest(res, `must provide both name and namespace or neither. name: ${map.name} namespace: ${map.namespace}`)
-  else{ // both parts of the name present
-    ps.db.withMapByQueryDo(map.namespace + ':' + map.scope + ':' + map.name, function (err, map) {
-      if (err != 404) {
-        if (err)
-          lib.badRequest(res, `unable to check for map name collision. err: ${err}`)
-        else
-          lib.duplicate(res, `duplicate map name ${map.namespace}:${map.name}`)
-      }
-      else// not already there
-        callback()
-    })
-  }
+  else {
+    var nameSplit = map.name.split(':')
+    if (nameSplit.length < 2)
+      lib.badRequest(res, `name must include a namespace identifier, a colon, and then a remainder`)
+    else if (!/^\w+$/.test(nameSplit[0])) 
+      lib.badRequest(res, `namespace must be alphanumeric or underscore`)    
+    else if (nameSplit.slice(1).join(':').length == 0)
+      lib.badRequest(res, `name must include a namespace identifier, a colon, and then a remainder`)
+    else // both parts of the name present
+      ps.db.withMapFromNameDo(map.name, function (err, map) {
+        if (err != 404) 
+          if (err)
+            lib.badRequest(res, `unable to check for map name collision. err: ${err}`)
+          else
+            lib.duplicate(res, `duplicate map name ${map.namespace}:${map.name}`)
+        else // not already there 
+          callback()
+      })
+    }
 }
 
 function verifyMap(req, map, user, callback) {
@@ -237,12 +241,12 @@ function updateMap(req, res, mapID, patch) {
       lib.internalError(res, reason)
     else
       ps.withMapDo(req, res, mapID, function(map) {
-        securedUpdateMap(req, res, mapID, map, patch)
+        doUpdateMap(req, res, mapID, map, patch)
       })
   })
 }
 
-function securedUpdateMap(req, res, mapID, map, patch) {
+function doUpdateMap(req, res, mapID, map, patch) {
   lib.applyPatch(req, res, map, patch, function(patchedMap) {
     function primUpdateMap() {
       ps.updateMapThen(req, res, mapID, patchedMap, function (etag) {
@@ -251,10 +255,10 @@ function securedUpdateMap(req, res, mapID, map, patch) {
       })    
     }
     verifyMapName(req, res, lib.getUser(req.headers.authorization), map, function() {
-      if (map.namespace === undefined)
+      if (patchedMap.name === undefined)
         primUpdateMap()
       else
-        pLib.ifAllowedThen(req.headers, `/namespaces;${map.namespace}`, '_self', 'create', function(err, reason) {
+        pLib.ifAllowedThen(req.headers, `/namespaces;${patchedMap.name.split(':')[0]}`, '_self', 'create', function(err, reason) {
           if (err)
             lib.internalError(res, reason)
           else
@@ -328,16 +332,6 @@ function getIDParts(req, res, mapFullName, callback) {
     callback(mapID, key)
   } else
     lib.badRequest(res, `ID must be composed of at least 2 parts separated by ":"s (${mapFullName})`)
-}
-
-function getMapName(req, res, mapFullName, callback) {
-  let splitID = mapFullName.split(':')
-  if (splitID.length == 2)
-    callback(splitID[0] + ':' + '' + ':' + splitID[1])
-  else if (splitID.length == 3)
-    callback(splitID[0] + ':' + splitID[1] + ':' + splitID[2])
-  else
-    lib.badRequest(res, `name must be composed of 2 or 3 parts separated by ":"s (${mapFullName})`)
 }
 
 function requestHandler(req, res) {
@@ -418,10 +412,10 @@ function requestHandler(req, res) {
       let splitPath = req_url.pathname.split('/')
       let valueID = splitPath[1].substring(VALUES.length-1)
       getIDParts(req, res, valueID, handleValueMethods)
-    } else if (req_url.pathname.lastIndexOf('/maps;', 0) > -1) { /* url of form /maps;ns:scope:name?????? */
+    } else if (req_url.pathname.lastIndexOf('/mapFromName;', 0) > -1) { /* url of form /maps;ns:name?????? */
       let splitPath = req_url.pathname.split('/')
-      let query = splitPath[1].substring('maps;'.length)
-      ps.withMapByQueryDo(req, res, query, function(map, mapID, etag) { // todo align mapID returned from PG and CASS so we can use it
+      let name = splitPath[1].substring('mapFromName;'.length)
+      ps.withMapFromNameDo(req, res, name, function(map, mapID, etag) { // todo align mapID returned from PG and CASS so we can use it
         handleMapPaths(splitPath, mapID)
       })
     } else
