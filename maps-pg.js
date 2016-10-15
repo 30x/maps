@@ -1,6 +1,5 @@
 'use strict';
 var Pool = require('pg').Pool;
-var uuid = require('node-uuid')
 
 var config = {
   host: process.env.PG_HOST,
@@ -14,27 +13,28 @@ var pool = new Pool(config);
 // The following function adapted from https://github.com/broofa/node-uuid4 under MIT License
 // Copyright (c) 2010-2012 Robert Kieffer
 const randomBytes = require('crypto').randomBytes
-const toHex = Array(256)
+var toHex = Array(256)
 for (var val = 0; val < 256; val++) 
   toHex[val] = (val + 0x100).toString(16).substr(1)
-
-function makeMapID(map, callback) {
+function uuid() {
   var buf = randomBytes(16)
   buf[6] = (buf[6] & 0x0f) | 0x40
   buf[8] = (buf[8] & 0x3f) | 0x80
   var i=0
-  callback(null,
-    toHex[buf[i++]] + toHex[buf[i++]] +
-    toHex[buf[i++]] + toHex[buf[i++]] + ':' +
-    toHex[buf[i++]] + toHex[buf[i++]] + ':' +
-    toHex[buf[i++]] + toHex[buf[i++]] + ':' +
-    toHex[buf[i++]] + toHex[buf[i++]] + ':' +
-    toHex[buf[i++]] + toHex[buf[i++]] + ':' +
-    toHex[buf[i++]] + toHex[buf[i++]] + ':' +
-    toHex[buf[i++]] + toHex[buf[i++]]
-  )
+  return  toHex[buf[i++]] + toHex[buf[i++]] +
+          toHex[buf[i++]] + toHex[buf[i++]] + '-' +
+          toHex[buf[i++]] + toHex[buf[i++]] + '-' +
+          toHex[buf[i++]] + toHex[buf[i++]] + '-' +
+          toHex[buf[i++]] + toHex[buf[i++]] + '-' +
+          toHex[buf[i++]] + toHex[buf[i++]] +
+          toHex[buf[i++]] + toHex[buf[i++]] +
+          toHex[buf[i++]] + toHex[buf[i++]]
 }
 // End of section of code adapted from https://github.com/broofa/node-uuid4 under MIT License
+
+function makeMapID(map, callback) {
+  callback(null, uuid())
+}
 
 function createMapThen(id, map, callback) {
   var etag = uuid()
@@ -110,6 +110,8 @@ function withMapFromNameDo(name, callback) {
       callback(err)
     else if (pg_res.rowCount === 0)
       callback(404)
+    else if (pg_res.rowCount > 1)
+      callback(409)
     else {
       var row = pg_res.rows[0];
       callback(null, row.data, row.id, row.etag);
