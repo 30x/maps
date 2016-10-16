@@ -114,7 +114,7 @@ function withMapFromNameDo(name, callback) {
       callback(409)
     else {
       var row = pg_res.rows[0];
-      callback(null, row.data, row.id, row.etag);
+      callback(null, row.id, row.data, row.etag);
     }
   })
 }

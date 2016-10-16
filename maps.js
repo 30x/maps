@@ -376,7 +376,8 @@ function requestHandler(req, res) {
     } else if (req_url.pathname.lastIndexOf('/mapFromName;', 0) > -1) { /* url of form /maps;ns:name?????? */
       let splitPath = req_url.pathname.split('/')
       let name = splitPath[1].substring('mapFromName;'.length)
-      ps.withMapFromNameDo(req, res, name, function(map, mapID, etag) { // todo align mapID returned from PG and CASS so we can use it
+      ps.withMapFromNameDo(req, res, name, function(mapID) { // todo align mapID returned from PG and CASS so we can use it
+        console.log(map)
         handleMapPaths(splitPath, mapID)
       })
     } else
