@@ -9,34 +9,34 @@ var MAPS    = '/bWFw-'
 var ENTRIES = '/ZW50-'
 var VALUES  = '/dmFs-'
 
-function verifyMapName(req, res, user, map, callback) {
-  if (map.name === undefined) // unnamed map
-    callback()
-  else {
-    var nameSplit = map.name.split(':')
-    if (nameSplit.length < 2)
-      lib.badRequest(res, `name must include a namespace identifier, a colon, and then a remainder`)
-    else if (!/^\w+$/.test(nameSplit[0])) 
-      lib.badRequest(res, `namespace must be alphanumeric or underscore`)    
-    else if (nameSplit.slice(1).join(':').length == 0)
-      lib.badRequest(res, `name must include a namespace identifier, a colon, and then a remainder`)
-    else // both parts of the name present
-      ps.db.withMapFromNameDo(map.name, function (err, map) {
-        if (err != 404) 
-          if (err)
-            lib.badRequest(res, `unable to check for map name collision. err: ${err}`)
-          else
-            lib.duplicate(res, `duplicate map name ${map.namespace}:${map.name}`)
-        else // not already there 
-          callback()
-      })
-    }
+function verifyMapUpdate(req, res, map, patchedMap, callback) {
+  if (map.org != patchedMap.org)
+    return lib.badRequest(res, `may not change org of a map: ${map.org} -> ${patchedMap.org}`)
+  if (map.name != patchedMap.name)
+    return lib.badRequest(res, `may not change name of a map: ${map.name} -> ${patchedMap.name}`)
+  if (map.fullName != patchedMap.fullName)
+    return lib.badRequest(res, `may not change fullName of a map: ${map.fullName} -> ${patchedMap.fullName}`)
+  callback()
 }
 
 function verifyMap(req, map, user, callback) {
   var rslt = lib.setStandardCreationProperties(req, map, user)
   if (map.isA != 'Map')
     return `invalid JSON: "isA" property not set to "Map" ${JSON.stringify(map)}`
+  if (typeof map.org != 'string')
+    return `invalid JSON: "org" property not set or not a string: ${map.org}`
+  if (map.fullName)
+    return `may not set fullName of map directly. FullName is calculated from name and org`
+  if (typeof map.name != 'string')
+    return `map name must be a string: ${map.name}`
+  var parsedOrg = url.parse(map.org)
+  if (!parsedOrg.pathname.startsWith('/v1/o/'))
+    return `org URL path must begin with /v1/o/ : ${map.org}`
+  var pathSplit = parsedOrg.pathname.split('/')
+  if (pathSplit.length != 4)
+    return `org URL path must be of form  /v1/o/{orgname} : ${map.org}`
+  var orgName = pathSplit[pathSplit.length - 1]
+  map.fullName = `${orgName}:${map.name}`
   return null
 }
 
@@ -53,22 +53,14 @@ function addCalculatedMapProperties(req, map, selfURL) {
 
 function createMap(req, res, map) {
   function primCreateMap() {
-    lib.internalizeURLs(map, req.headers.host) 
-    var permissions = map.permissions
-    if (permissions !== undefined)
-      delete map.permissions
-    ps.makeMapID(req, res, map, function(mapID) {
-      var selfURL = makeMapURL(req, mapID)
-      pLib.createPermissionsFor(req.headers, selfURL, permissions, function(err, permissionsURL, permissions){
-        if (err == 401)
-          lib.forbidden(req, res)
-        else if (err == 400)
-          lib.badRequest(res, permissionsURL)
-        else if (err == 500)
-          lib.internalError(res, permissionsURL)
-        else if (err == 403)
-          lib.forbidden(req, res)
-        else 
+    pLib.ifAllowedThen(req, res, map.org, 'maps', 'create', function() {
+      lib.internalizeURLs(map, req.headers.host) 
+      var permissions = map.permissions
+      if (permissions !== undefined)
+        delete map.permissions
+      ps.makeMapID(req, res, map, function(mapID) {
+        var selfURL = makeMapURL(req, mapID)
+        pLib.createPermissionsThen(req, res, selfURL, permissions, function(permissionsURL, permissions){
           // Create permissions first. If we fail after creating the permissions resource but before creating the main resource, 
           // there will be a useless but harmless permissions document.
           // If we do things the other way around, a map without matching permissions could cause problems.
@@ -76,7 +68,8 @@ function createMap(req, res, map) {
             addCalculatedMapProperties(req, map, selfURL)
             lib.created(req, res, map, map.self, etag)
           })
-      })    
+        })    
+      })
     })
   }
   var user = lib.getUser(req.headers.authorization)
@@ -86,16 +79,16 @@ function createMap(req, res, map) {
     var err = verifyMap(req, map, user)
     if (err !== null) 
       lib.badRequest(res, err)
-    else {
-      verifyMapName(req, res, user, map, function () {
-        if (map.namespace === undefined)
-          primCreateMap()
-        else
-          pLib.ifAllowedThen(req, res, `/namespaces;${map.namespace}`, '_self', 'create', function() {
-            primCreateMap()
-          })
+    else
+      ps.db.withMapFromNameDo(map.name, function (err) {
+        if (err != 404) 
+          if (err)
+            lib.badRequest(res, `unable to check for map name collision. err: ${err}`)
+          else
+            lib.duplicate(res, `duplicate map name ${map.namespace}:${map.name}`)
+        else // not already there       
+          pLib.ifAllowedThen(req, res, map.org, 'maps', 'create', primCreateMap)
       })
-    }
   }
 }
 
@@ -232,11 +225,8 @@ function doUpdateMap(req, res, mapID, map, patch) {
         lib.found(req, res, patchedMap, etag);
       })    
     }
-    verifyMapName(req, res, lib.getUser(req.headers.authorization), patchedMap, function() {
-      if (patchedMap.name === undefined)
-        primUpdateMap()
-      else
-        pLib.ifAllowedThen(req, res, `/namespaces;${patchedMap.name.split(':')[0]}`, '_self', 'create', primUpdateMap)
+    verifyMapUpdate(req, res, map, patchedMap, function() {
+      primUpdateMap()
     })
   })  
 }

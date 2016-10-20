@@ -105,7 +105,7 @@ function withValueDo(mapID, key, callback) {
 }
 
 function withMapFromNameDo(name, callback) {
-  pool.query(`SELECT id, etag, data FROM maps WHERE data @> '{"name": "${name}"}'`, function (err, pg_res) {
+  pool.query(`SELECT id, etag, data FROM maps WHERE data @> '{"fullName": "${name}"}'`, function (err, pg_res) {
     if (err) 
       callback(err)
     else if (pg_res.rowCount === 0)

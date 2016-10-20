@@ -23,21 +23,24 @@ if 'APIGEE_TOKEN1' in env:
 else:
     with open('token.txt') as f:
         TOKEN1 = f.read()
-USER1 = json.loads(b64_decode(TOKEN1.split('.')[1]))['user_id']
+claims = json.loads(b64_decode(TOKEN1.split('.')[1]))
+USER1 = claims['iss'] + '#' + claims['sub']
 
 if 'APIGEE_TOKEN2' in env:
     TOKEN2 = env['APIGEE_TOKEN2']
 else:
     with open('token2.txt') as f:
         TOKEN2 = f.read()
-USER2 = json.loads(b64_decode(TOKEN2.split('.')[1]))['user_id']
+claims = json.loads(b64_decode(TOKEN2.split('.')[1]))
+USER2 = claims['iss'] + '#' + claims['sub']
 
 if 'APIGEE_TOKEN3' in env:
     TOKEN3 = env['APIGEE_TOKEN3']
 else:
     with open('token3.txt') as f:
         TOKEN3 = f.read()
-USER3 = json.loads(b64_decode(TOKEN3.split('.')[1]))['user_id']
+claims = json.loads(b64_decode(TOKEN2.split('.')[1]))
+USER2 = claims['iss'] + '#' + claims['sub']
 
 def main():
     
@@ -56,15 +59,52 @@ def main():
         print 'failed to delete map %s %s %s' % (map_url, r.status_code, r.text)
         return
 
+    # Make sure the permissions exist for the test Org
+
+    org_url = '/v1/o/acme'
+
+    permissions = {
+        '_subject': org_url,
+        '_permissions': {
+          'read': [USER1],
+          'update': [USER1],
+          'delete': [USER1]
+        },
+        '_self': {
+          'read': [USER1],
+          'delete': [USER1],
+          'update': [USER1],
+          'create': [USER1]
+        },
+        'maps': {
+          'read': [USER1],
+          'delete': [USER1],
+          'create': [USER1]
+        }
+      }
+
+    permissons_url = urljoin(BASE_URL, '/permissions')
+    headers = {'Authorization': 'Bearer %s' % TOKEN1, 'Content-Type': 'application/json'}
+    r = requests.post(permissons_url, headers=headers, json=permissions)
+    if r.status_code == 201:
+        print 'correctly created permissions for org %s etag: %s' % (r.headers['Location'], r.headers['etag'])
+    elif r.status_code == 409:
+        print 'correctly saw that permissions for org %s already exist' % (org_url)    
+    else:
+        print 'failed to create map %s %s %s' % (maps_url, r.status_code, r.text)
+        return
+
+    # Create map using POST
+
     map = {
         'isA': 'Map',
+        'org': '/v1/o/acme',
+        'name': 'nursery-rhymes',
         'test-data': True
         }
 
     maps_url = urljoin(BASE_URL, '/maps') 
     
-    # Create map using POST
-
     headers = {'Content-Type': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
     r = requests.post(maps_url, headers=headers, json=map)
     if r.status_code == 201:
@@ -180,39 +220,6 @@ def main():
         print 'failed to retrieve map entries %s %s %s' % (map_url, r.status_code, r.text)
         return
 
-    # POST namespace
-
-    namespace = {
-        'isA': 'Namespace',
-        'name': 'acme'
-        }
-
-    namespaces_url = urljoin(BASE_URL, '/namespaces') 
-    
-    headers = {'Content-Type': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
-    r = requests.post(namespaces_url, headers=headers, json=namespace)
-    if r.status_code == 201:
-        print 'correctly created namespace %s ' % (r.headers['Location'])
-        namespace_url = urljoin(BASE_URL, r.headers['Location'])
-    elif r.status_code == 409:
-        print 'namespace already exists'    
-    else:
-        print 'failed to create namespace %s %s %s' % (namespaces_url, r.status_code, r.text)
-    # PATCH map
-
-    patch = {
-        'name': 'acme:nursery-rhymes'
-    }
-        
-    headers = {'Content-Type': 'application/merge-patch+json','Authorization': 'Bearer %s' % TOKEN1}
-    r = requests.patch(map_url, headers=headers, json=patch)
-    if r.status_code == 200:
-        patched_map = r.json()
-        print 'correctly patched map: %s etag: %s' % (map_url, r.headers['etag'])
-    else:
-        print 'failed to patch map %s %s %s' % (map_url, r.status_code, r.text)
-        return
-
     # GET map by name
 
     name_url = urljoin(BASE_URL, '/mapFromName;acme:nursery-rhymes')
@@ -227,6 +234,7 @@ def main():
     map = {
         'isA': 'Map',
         'name': 'acme:nursery-rhymes',
+        'org': '/v1/o/acme',
         'test-data': True
         }
 
