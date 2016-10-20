@@ -232,7 +232,7 @@ function doUpdateMap(req, res, mapID, map, patch) {
         lib.found(req, res, patchedMap, etag);
       })    
     }
-    verifyMapName(req, res, lib.getUser(req.headers.authorization), map, function() {
+    verifyMapName(req, res, lib.getUser(req.headers.authorization), patchedMap, function() {
       if (patchedMap.name === undefined)
         primUpdateMap()
       else
@@ -377,7 +377,6 @@ function requestHandler(req, res) {
       let splitPath = req_url.pathname.split('/')
       let name = splitPath[1].substring('mapFromName;'.length)
       ps.withMapFromNameDo(req, res, name, function(mapID) { // todo align mapID returned from PG and CASS so we can use it
-        console.log(map)
         handleMapPaths(splitPath, mapID)
       })
     } else
