@@ -53,11 +53,11 @@ spec:
                 key: private-api-key
           - name: SPEEDUP
             value: "10" 
-          - name: INTERNAL_ROUTER_HOST
+          - name: INTERNAL_SY_ROUTER_HOST
             valueFrom:
               fieldRef:
                 fieldPath: status.podIP          
-          - name: INTERNAL_ROUTER_PORT
+          - name: INTERNAL_SY_ROUTER_PORT
             value: "30556"
           - name: IPADDRESS
             valueFrom:
