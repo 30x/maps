@@ -47,8 +47,8 @@ function makeMapURL(req, mapID) {
 function addCalculatedMapProperties(req, map, selfURL) {
   map.self = selfURL; 
   map.entries = `${selfURL}/entries`
-  map._permissions = `protocol://authority/permissions?${map.self}`
-  map._permissionsHeirs = `protocol://authority/permissions-heirs?${map.self}`
+  map._permissions = `scheme://authority/permissions?${map.self}`
+  map._permissionsHeirs = `scheme://authority/permissions-heirs?${map.self}`
 }
 
 function createMap(req, res, map) {
@@ -175,8 +175,8 @@ function getValue(req, res, mapID, key) {
 
 function returnMap(req, res, map, mapID, etag) {
   addCalculatedMapProperties(req, map, makeMapURL(req, mapID))
-  map._permissions = `protocol://authority/permissions?${map.self}`
-  map._permissionsHeirs = `protocol://authority/permissions-heirs?${map.self}`
+  map._permissions = `scheme://authority/permissions?${map.self}`
+  map._permissionsHeirs = `scheme://authority/permissions-heirs?${map.self}`
   lib.externalizeURLs(map, req.headers.host)
   lib.found(req, res, map, etag)
 }
