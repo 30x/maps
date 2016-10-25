@@ -194,16 +194,13 @@ function deleteMap(req, res, mapID) {
   pLib.ifAllowedThen(req, res, mapURL, '_self', 'delete', function() {
     ps.deleteMapThen(req, res, mapID, function (map, etag) {
       var permissionsURL = `/permissions?${mapURL}`
-      lib.sendInternalRequest(req.headers, permissionsURL, 'DELETE', null, function (err, clientRes) {
-        if (err)
-          lib.internalError(res, err)
-        else
-          lib.getClientResponseBody(clientRes, function(body) {
-            if (clientRes.statusCode == 200)  
-              lib.found(req, res, map, etag)
-            else
-              lib.internalError(res, `failed to delete permissions: ${permissionsURL} status_code: ${clientRes.status_code} data: ${body}`);
-          })
+      lib.sendInternalRequestThen(req, res, permissionsURL, 'DELETE', null, function (err, clientRes) {
+        lib.getClientResponseBody(clientRes, function(body) {
+          if (clientRes.statusCode == 200)  
+            lib.found(req, res, map, etag)
+          else
+            lib.internalError(res, `failed to delete permissions: ${permissionsURL} status_code: ${clientRes.status_code} data: ${body}`);
+        })
       })
     })
   })
