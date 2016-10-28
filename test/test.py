@@ -47,7 +47,7 @@ def main():
 
     # DELETE map
 
-    map_url = urljoin(BASE_URL, '/mapFromName;acme:nursery-rhymes')
+    map_url = urljoin(BASE_URL, '/mapFromName;ayesha:nursery-rhymes')
     headers = {'Authorization': 'Bearer %s' % TOKEN1}
     r = requests.delete(map_url, headers=headers)
     if r.status_code == 200:
@@ -60,7 +60,7 @@ def main():
 
     # Make sure the permissions exist for the test Org
 
-    org_url = '/v1/o/acme'
+    org_url = '/v1/o/ayesha'
 
     permissions = {
         '_subject': org_url,
@@ -97,7 +97,7 @@ def main():
 
     map = {
         'isA': 'Map',
-        'org': '/v1/o/acme',
+        'org': '/v1/o/ayesha',
         'name': 'nursery-rhymes',
         'test-data': True
         }
@@ -221,7 +221,7 @@ def main():
 
     # GET map by name
 
-    name_url = urljoin(BASE_URL, '/mapFromName;acme:nursery-rhymes')
+    name_url = urljoin(BASE_URL, '/mapFromName;ayesha:nursery-rhymes')
     headers = {'Accept': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
     r = requests.get(name_url, headers=headers, json=map)
     if r.status_code == 200:
@@ -232,8 +232,8 @@ def main():
 
     map = {
         'isA': 'Map',
-        'name': 'acme:nursery-rhymes',
-        'org': '/v1/o/acme',
+        'name': 'nursery-rhymes',
+        'org': '/v1/o/ayesha',
         'test-data': True
         }
 
@@ -249,7 +249,7 @@ def main():
 
     # GET entries by map name
 
-    entries_url = urljoin(BASE_URL, '/mapFromName;acme:nursery-rhymes/entries')
+    entries_url = urljoin(BASE_URL, '/mapFromName;ayesha:nursery-rhymes/entries')
     headers = {'Accept': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
     r = requests.get(entries_url, headers=headers, json=map)
     if r.status_code == 200:
@@ -264,7 +264,7 @@ def main():
 
     # GET entry by map name and key
 
-    entry_url = urljoin(BASE_URL, '/mapFromName;acme:nursery-rhymes/entries;HumptyDumpty')
+    entry_url = urljoin(BASE_URL, '/mapFromName;ayesha:nursery-rhymes/entries;HumptyDumpty')
     headers = {'Accept': 'application/json','Authorization': 'Bearer %s' % TOKEN1}
     r = requests.get(entry_url, headers=headers, json=map)
     if r.status_code == 200:
@@ -275,7 +275,7 @@ def main():
 
     # GET value by map name and key
 
-    value_url = urljoin(BASE_URL, '/mapFromName;acme:nursery-rhymes/entries;HumptyDumpty/value')
+    value_url = urljoin(BASE_URL, '/mapFromName;ayesha:nursery-rhymes/entries;HumptyDumpty/value')
     headers = {'Authorization': 'Bearer %s' % TOKEN1}
     r = requests.get(value_url, headers=headers, json=map)
     if r.status_code == 200:
