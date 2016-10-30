@@ -80,12 +80,12 @@ function createMap(req, res, map) {
     if (err !== null) 
       lib.badRequest(res, err)
     else
-      ps.db.withMapFromNameDo(map.name, function (err) {
+      ps.db.withMapFromNameDo(map.fullName, function (err) {
         if (err != 404) 
           if (err)
             lib.badRequest(res, `unable to check for map name collision. err: ${err}`)
           else
-            lib.duplicate(res, `duplicate map name ${map.namespace}:${map.name}`)
+            lib.duplicate(res, `duplicate map name ${map.name}`)
         else // not already there       
           pLib.ifAllowedThen(req, res, map.org, 'maps', 'create', primCreateMap)
       })
@@ -194,7 +194,7 @@ function deleteMap(req, res, mapID) {
   pLib.ifAllowedThen(req, res, mapURL, '_self', 'delete', function() {
     ps.deleteMapThen(req, res, mapID, function (map, etag) {
       var permissionsURL = `/permissions?${mapURL}`
-      lib.sendInternalRequestThen(req, res, permissionsURL, 'DELETE', null, function (err, clientRes) {
+      lib.sendInternalRequestThen(req, res, permissionsURL, 'DELETE', null, function (clientRes) {
         lib.getClientResponseBody(clientRes, function(body) {
           if (clientRes.statusCode == 200)  
             lib.found(req, res, map, etag)

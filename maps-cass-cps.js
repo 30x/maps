@@ -4,7 +4,7 @@ const kvmEntryPartitionCount = process.env.MAPS_KVM_ENTRY_PARTITION_COUNT || 32
 const config = {
   databaseHosts: process.env.CASS_HOSTS ? process.env.CASS_HOSTS.split(",") : ['localhost'],
   databasePort: process.env.CASS_PORT ? process.env.CASS_PORT : 9042,
-  databaseKeyspace: process.env.CASS_KEYSPACE || 'kvm_acme_prod',
+  databaseKeyspace: process.env.CASS_KEYSPACE || 'kvm_free1_us_west_2',
   databaseReplication: process.env.CASS_REPLICATION ? process.env.CASS_REPLICATION : "'datacenter1':'1'", // comma separate single quote key/value pairs
   databaseLocalDC: process.env.CASS_LOCAL_DC || 'datacenter1',
   databaseLoadBalancingPolicy: cassandra.policies.loadBalancing.DCAwareRoundRobinPolicy(this.databaseLocalDC),
@@ -35,347 +35,347 @@ const client = new cassandra.Client({
   }
 
 })
+
+const lib = require('http-helper-functions')
 const SEPARATOR = ':'
 
 
 // inserts
 function insertMap(keyspace){ return 'INSERT INTO ' + keyspace + '.kvm_map_descriptor (tid, a_scp, map, attr, c_at, c_by, u_at, u_by, ver) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'}
-function insertIndex(keyspace){ return 'INSERT INTO ' + keyspace + '.indexes (name, mapid) VALUES (?, ?)'}
 function insertMapEntry(keyspace){ return  'INSERT INTO ' + keyspace + '.kvm_map_keys_descriptor (tid, a_scp, map, ver, part_id, key, c_at, c_by, u_at, u_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'}
 function insertMapValue(keyspace){ return 'INSERT INTO ' + keyspace + '.kvm_map_entry (tid, a_scp, map, ver, key, c_at, c_by, u_at, u_by, val) VALUES (? ,?, ?, ?, ?, ?, ?, ?, ?, ?)'}
 
 // selects
 function selectMap(keyspace ){ return 'SELECT * FROM ' + keyspace + '.kvm_map_descriptor WHERE tid = ? and a_scp = ? and map = ?'}
-function selectmapIdFromName(keyspace){ return 'SELECT mapid FROM ' + keyspace + '.indexes WHERE name = ?'}
 function selectEntries(keyspace){ return 'SELECT * FROM ' + keyspace + '.kvm_map_keys_descriptor WHERE tid = ? and a_scp = ? and map = ? and ver = ? and part_id = ?'}
 function selectEntry(keyspace){ return 'SELECT * FROM ' + keyspace + '.kvm_map_keys_descriptor WHERE tid = ? and a_scp = ? and map = ? and ver = ? and part_id = ? and key = ?'}
 function selectValue(keyspace){ return 'SELECT * FROM ' + keyspace + '.kvm_map_entry WHERE tid = ? and a_scp = ? and map = ? and ver = ? and key = ?'}
 
 //deletes
 function deleteMap(keyspace){ return 'DELETE FROM ' + keyspace + '.kvm_map_descriptor WHERE tid = ? and a_scp = ? and map = ?'}
-function deleteMapIndex(keyspace){ return 'DELETE FROM ' + keyspace + '.indexes WHERE name = ?'}
 function deleteMapEntry(keyspace){ return 'DELETE FROM ' + keyspace + '.kvm_map_keys_descriptor WHERE tid = ? and a_scp = ? and map = ? and ver = ? and part_id = ? and key = ?'}
 function deleteMapValue(keyspace){ return 'DELETE FROM ' + keyspace + '.kvm_map_entry WHERE tid = ? and a_scp = ? and map = ? and ver = ? and key = ?'}
 
 
-function createMapThen(mapId, map, callback) {
-  let [ns, scope, name] = mapId.split(':')
-  const batchQueries = [
-    {query: insertMap(config.databaseKeyspace), params: [ns, scope, name, {}, map.created, map.creator, map.created, map.creator, cassandra.types.TimeUuid.now()]},
-  ]
-  if (map && map.id && map.id != mapId) // change to a map name here
-    batchQueries.push({query: insertIndex(config.databaseKeyspace), params: [mapId, map.name]})
-  client.batch(batchQueries, {prepare: true}, function (err, result) {
-    if (err)
-      callback(err)
-    else {
-      //console.log('Added map=' + JSON.stringify(map)+')
-      callback(null, null) // inserts do not generate result rows
-    }
-  })
+// The following function adapted from https://github.com/broofa/node-uuid4 under MIT License
+// Copyright (c) 2010-2012 Robert Kieffer
+const randomBytes = require('crypto').randomBytes
+var toHex = Array(256)
+for (var val = 0; val < 256; val++)
+  toHex[val] = (val + 0x100).toString(16).substr(1)
+function uuid() {
+  var buf = randomBytes(16)
+  buf[6] = (buf[6] & 0x0f) | 0x40
+  buf[8] = (buf[8] & 0x3f) | 0x80
+  var i=0
+  return  toHex[buf[i++]] + toHex[buf[i++]] +
+    toHex[buf[i++]] + toHex[buf[i++]] + '-' +
+    toHex[buf[i++]] + toHex[buf[i++]] + '-' +
+    toHex[buf[i++]] + toHex[buf[i++]] + '-' +
+    toHex[buf[i++]] + toHex[buf[i++]] + '-' +
+    toHex[buf[i++]] + toHex[buf[i++]] +
+    toHex[buf[i++]] + toHex[buf[i++]] +
+    toHex[buf[i++]] + toHex[buf[i++]]
 }
+// End of section of code adapted from https://github.com/broofa/node-uuid4 under MIT License
 
-function updateMapThen(mapId, patchedMap, callback) {
-  let [ns, scope, name] = mapId.split(':')
-  const batchQueries = [
-    {query: insertMap(config.databaseKeyspace), params: [ns, scope, name, {}, patchedMap.created, patchedMap.creator, patchedMap.created, patchedMap.creator, cassandra.types.TimeUuid.now()]},
-  ]
-  withMapDo(mapId, function (err, map, etag) {
-    if (err)
-      callback(err)
-    else if (map == null)
-      callback(404)
-    else {
-      // handle name changes
-      if( patchedMap.name && patchedMap.name !== map.name){
-        batchQueries.push({query: deleteMapIndex(config.databaseKeyspace), params: [map.name]})
-        batchQueries.push({query: insertIndex(config.databaseKeyspace), params: [patchedMap.name, map.name]})
+function makeMapID(map, callback) {
+  if( map.org && map.name){
+    //console.log('makeMapID org: '+map.org)
+    var orgParts = map.org.split("/")
+    map.org = orgParts[orgParts.length -1] // for some reason this has scheme and authority on the org name for permissions
+    getTenantAndKeyspace(map.org, function(err, ring, keyspace, tenantID){
+      if(err)
+        callback(`Failed to make mapID from org and name. Unable to get keyspace and tenant for org: `+map.org)
+      else{
+        let parts = map.name.split(':')
+        let scope = parts.slice(0, -1).join(':')
+        let name = parts[parts.length - 1]
+        let version = cassandra.types.TimeUuid.now().toString()
+        callback(null, getMapID(ring, keyspace, tenantID, scope, name, version))
       }
-      client.batch(batchQueries, {prepare: true}, function (err, result) {
-        if (err) {
-          callback(err)
-        }
-        else {
-          callback(null, null) // inserts do not generate result rows
-        }
-      })
-    }
+    })
+  }
+  else
+    callback(null, uuid())
+}
+
+function createMapThen(mapID, map, callback) {
+  getMapIDParts(mapID, function(err, ring, keyspace, tenantID, scope, name, version){
+   if(err)
+     callback(err)
+   else{
+     const batchQueries = [
+       {query: insertMap(keyspace), params: [tenantID, scope, name, {'mapFullName': map.fullName }, map.created, map.creator, map.created, map.creator, cassandra.types.Uuid.fromString(version)]},
+     ]
+     client.batch(batchQueries, {prepare: true}, function (err, result) {
+       if (err)
+         callback(err)
+       else {
+         //console.log('Added map=' + JSON.stringify(map)+')
+         callback(null, null) // inserts do not generate result rows
+       }
+     })
+   }
   })
 }
 
-
-function createEntryThen(mapId, key, entry, callback) {
-  withMapDo(mapId, function (err, map, etag) {
+function updateMapThen(mapID, patchedMap, callback) {
+  // in Cassandra the insert will overwrite
+  createMapThen(mapID, patchedMap, function (err, map, etag) {
     if (err)
       callback(err)
     else if (map == null)
       callback(404)
-    else{
-      let [ns, scope, name] = map.name.split(':')
-      client.execute(insertMapEntry(config.databaseKeyspace), [ns, scope, name, cassandra.types.Uuid.fromString(map.version), getMapEntryPartitionId(key), key, entry.created, entry.creator, entry.created, entry.creator], {prepare: true}, function (err, result) {
+    else
+      callback(null,null)
+  })
+}
+
+
+function createEntryThen(mapID, key, entry, callback) {
+    getMapIDParts(mapID, function(err, ring, keyspace, tenantID, scope, name, version){
+      client.execute(insertMapEntry(keyspace), [tenantID, scope, name, cassandra.types.Uuid.fromString(version), getMapEntryPartitionId(key), key, entry.created, entry.creator, entry.created, entry.creator], {prepare: true}, function (err, result) {
         if (err)
           callback(err)
         else {
           callback(null, null) // inserts do not generate result rows
         }
-
       })
-    }
-  })
+    })
+
 }
 
-function upsertValueThen(mapId, key, valuedata, value, callback) {
-  createMapValue(mapId, key, valuedata, value, callback)
+function upsertValueThen(mapID, key, valuedata, value, callback) {
+  createMapValue(mapID, key, valuedata, value, callback)
 }
 
-function createMapValue(mapId, key, valuedata, value, callback) {
+function createMapValue(mapID, key, valuedata, value, callback) {
   if (!(value instanceof String)) {
     value = value.toString()
     //callback(true, {error: 'Value must be a string'})
   }
-  withMapDo(mapId, function (err, map, etag) {
-    if (err)
+  getMapIDParts(mapID, function(err, ring, keyspace, tenantID, scope, name, version){
+    // purposely need two separate calls to cassandra as you can't execute a batch with 2 partitions ( tables ) with the condition IF NOT EXISTS
+    client.execute(insertMapValue(keyspace), [tenantID, scope, name, cassandra.types.Uuid.fromString(version), key, valuedata.created, valuedata.creator, valuedata.created, valuedata.creator, value], {prepare: true}, function (err, result) {
+      if (err)
+        callback(err)
+      else {
+        client.execute(insertMapEntry(config.databaseKeyspace) + 'IF NOT EXISTS',  [tenantID, scope, name, cassandra.types.Uuid.fromString(version), getMapEntryPartitionId(key), key, valuedata.created, valuedata.creator, valuedata.created, valuedata.creator], {prepare: true}, function (err, result) {
+          if (err)
+            callback(err)
+          else
+            callback(null, null) // inserts do not generate result rows
+        })
+      }
+    })
+
+  })
+}
+
+function getMapIDParts(mapID, callback){
+  var parts = mapID.split(':')
+  if(parts < 2 )
+    callback(400)
+  else {
+    let ring = parts[0]
+    let keyspace = parts[1]
+    let tenantID = parts[2]
+    let scope = parts.slice(3, -2).join(':')
+    let name = parts[parts.length - 2]
+    let version = parts[parts.length - 1]
+    callback(null, ring, keyspace, tenantID, scope, name, version)
+  }
+}
+
+function withMapDo(mapID, callback) {
+  getMapIDParts(mapID, function(err, ring, keyspace, tenantID, scope, name, version){
+    if(err)
       callback(err)
-    else if (map == null)
-      callback(404)
-    else{
-      let [ns, scope, name] = mapId.split(':')
-      // purposely need two separate calls to cassandra as you can't execute a batch with 2 partitions ( tables ) with the condition IF NOT EXISTS
-      client.execute(insertMapValue(config.databaseKeyspace), [ns, scope, name, cassandra.types.Uuid.fromString(map.version), key, valuedata.created, valuedata.creator, valuedata.created, valuedata.creator, value], {prepare: true}, function (err, result) {
+    else {
+      client.execute(selectMap(keyspace), [tenantID, scope, name], {prepare: true}, function (err, result) {
         if (err)
-          callback(err)
+          callback(err, null, null)
+        else if (result.rows.length === 0)
+          callback(404, null, null)
         else {
-          client.execute(insertMapEntry(config.databaseKeyspace) + 'IF NOT EXISTS',  [ns, scope, name, cassandra.types.Uuid.fromString(map.version), getMapEntryPartitionId(key), key, valuedata.created, valuedata.creator, valuedata.created, valuedata.creator], {prepare: true}, function (err, result) {
-            if (err)
-              callback(err)
-            else
-              callback(null, null) // inserts do not generate result rows
+          var map = {}
+          if (result.rows.length > 0) {
+            map.id = getMapID(ring, keyspace, result.rows[0].get('tid'), result.rows[0].get('a_scp'), result.rows[0].get('map'), result.rows[0].get('ver').toString())
+            var scope = result.rows[0].get('a_scp')
+            var mapName = result.rows[0].get('map')
+            if (scope){
+              mapName = scope + ":" + mapName
+            }
+            map.name = mapName
+            map.created = result.rows[0].get('c_at')
+            map.createdBy = result.rows[0].get('c_by')
+            map.updated = result.rows[0].get('u_at')
+            map.updatedBy = result.rows[0].get('u_by')
+            map.version = result.rows[0].get('ver').toString()
+            var mapAttrs =  result.rows[0].get('attr')
+            if (mapAttrs.mapFullName)
+              map.fullName = mapAttrs.mapFullName
+              map.org = '/v1/o/'+mapAttrs.mapFullName.split(":")[0]
+          }
+          callback(null, map, null)
+        }
+      })
+    }
+  })
+}
+
+function withMapFromNameDo(compoundName, callback) {
+  var parts = compoundName.split(':')
+  if (parts.length < 2)
+    callback(400)
+  else {
+    let org = parts[0]
+    let scope = parts.slice(1, -1).join(':')
+    let name = parts[parts.length - 1]
+    //console.log('withMapFromNameDo org: '+org)
+    getTenantAndKeyspace(org, function(err, ring, keyspace, tenantID){
+      if(err)
+        callback(`Unable to load map from name. Failed to get keyspace and tenant for org: `+org)
+      else{
+        var mapID = getMapID(ring, keyspace, tenantID, scope, name, "version_not_used_when_looking_up_map")
+        withMapDo(mapID, function (err, map, etag) {
+          if (err)
+            callback(err)
+          else if (map == null)
+            callback(404)
+          else {
+            callback(null, map.id, map, etag)
+          }
+        })
+      }
+    })
+  }
+}
+
+function withEntriesDo(mapID, callback) {
+  getMapIDParts(mapID, function(err, ring, keyspace, tenantID, scope, name, version){
+    // todo page this and accept in a cursor string in withEntriesDo, will need to calculate part_id with getMapEntryPartitionId(key)
+    client.execute(selectEntries(keyspace), [tenantID, scope, name, cassandra.types.Uuid.fromString(version), 0], {prepare: true}, function (err, result) {
+      if (err)
+        callback(err)
+      else {
+        if (result.rows.length > 0) {
+          var processed = 0;
+          result.rows.forEach(function (entry) {
+            processed++
+            var key = entry.key;
+            var name = getMapID(ring, keyspace, entry.tid, entry.scope, entry.map, entry.ver);
+            var entrydata = {
+              name: name,
+              created: entry.created,
+              createdBy: entry.createdBy,
+              updated: entry.updated,
+              updatedBy: entry.updatedyBy
+
+            }
+            entry = {
+              mapid: name,
+              key: key,
+              entrydata: entrydata,
+              etag: null
+            }
+
+            if (processed === result.rows.length)
+              callback(null, result.rows) // we're done looping, now invoke callback
           })
         }
-      })
-    }
-  })
-}
-
-
-function withMapDo(mapId, callback) {
-  let [ns, scope, name] = mapId.split(':')
-  client.execute(selectMap(config.databaseKeyspace), [ns, scope, name], {prepare: true}, function (err, result) {
-    if (err)
-      callback(err)
-    else if ( result.rows.length === 0)
-      callback(404)
-    else {
-      var map = {}
-      if (result.rows.length > 0) {
-        map.name = getMapId(result.rows[0].get('tid'), result.rows[0].get('a_scp'), result.rows[0].get('map'))
-        map.created = result.rows[0].get('c_at')
-        map.createdBy = result.rows[0].get('c_by')
-        map.updated = result.rows[0].get('u_at')
-        map.updatedBy = result.rows[0].get('u_by')
-        map.version = result.rows[0].get('ver').toString()
-        map.attributes = result.rows[0].get('attr')
+        else
+          callback(null, [])
       }
-      callback(null, map, null)
-    }
-  })
-}
-
-function withMapByNameDo(compoundName, callback) {
-  getMapAlias(compoundName, function(err, compoundNameFromIndex){
-    if (err)
-      callback(err)
-    else{
-     var mapId =  compoundNameFromIndex !== null ? compoundNameFromIndex : compoundName
-     withMapDo(mapId, function (err, map, etag) {
-        if (err)
-          callback(err)
-        else if (map == null)
-          callback(404)
-        else
-          callback(null, map, compoundNameFromIndex, etag)
-      })
-    }
+    })
   })
 }
 
 
-function getMapAlias(compoundName, callback) {
-  client.execute(selectmapIdFromName(config.databaseKeyspace), [compoundName], {prepare: true}, function (err, result) {
-    if (err)
-      callback(err)
-    else if ( result.rows.length === 0)
-      callback(404)
-    else if ( result.rows.length > 1)
-      callback(true, {error:'More than one UUID mapped to map name'})
-    else
-      callback(null, result.rows.length > 0 ? result.rows[0].get('mapid').toString() : null)
-  })
-}
-
-
-function withEntriesDo(mapId, callback) {
-  withMapDo(mapId, function (err, map, etag) {
-    if (err)
-      callback(err)
-    else if (map == null)
-      callback(404)
-    else {
-      let [ns, scope, name] = map.name.split(':')
-      // TODO page this and accept in a cursor string in withEntriesDo, will need to calculate part_id with getMapEntryPartitionId(key)
-      client.execute(selectEntries(config.databaseKeyspace), [ns, scope, name, cassandra.types.Uuid.fromString(map.version), 0], {prepare: true}, function (err, result) {
-        if (err)
-          callback(err)
-        else {
-          if (result.rows.length > 0) {
-            var processed = 0;
-            result.rows.forEach(function (entry) {
-              processed++
-              var key = entry.key;
-              var name = getMapId(entry.tid, entry.scope, entry.map);
-              var entrydata = {
-                name: name,
-                created: entry.created,
-                createdBy: entry.createdBy,
-                updated: entry.updated,
-                updatedBy: entry.updatedyBy
-
-              }
-              entry = {
-                mapid: name,
-                key: key,
-                entrydata: entrydata,
-                etag: null
-              }
-
-              if (processed === result.rows.length)
-                callback(null, result.rows) // we're done looping, now invoke callback
-            })
+function withEntryDo(mapID, key, callback) {
+  getMapIDParts(mapID, function(err, ring, keyspace, tenantID, scope, name, version){
+    client.execute(selectEntry(keyspace), [tenantID, scope, name, cassandra.types.Uuid.fromString(version), getMapEntryPartitionId(key), key], {prepare: true}, function (err, result) {
+      if (err)
+        callback(err)
+      else {
+        var key, etag, entrydata
+        if (result.rows.length > 0) {
+          var name = getMapID(ring, keyspace, result.rows[0].get('tid'), result.rows[0].get('a_scp'), result.rows[0].get('map'), result.rows[0].get('ver'));
+          key = result.rows[0].get('key')
+          entrydata = {
+            name: name,
+            created: result.rows[0].get('c_at'),
+            createdBy: result.rows[0].get('c_by'),
+            updated: result.rows[0].get('u_at'),
+            updatedBy: result.rows[0].get('u_by')
           }
-          else
-            callback(null, [])
+          etag = null
         }
-      })
-    }
+        callback(null, entrydata, etag)
+      }
+    })
   })
 }
 
 
-function withEntryDo(mapId, key, callback) {
-  withMapDo(mapId, function (err, map, etag) {
-    if (err)
-      callback(err)
-    else if (map == null)
-      callback(404)
-    else{
-      let [ns, scope, name] = map.name.split(':')
-      client.execute(selectEntry(config.databaseKeyspace), [ns, scope, name, cassandra.types.Uuid.fromString(map.version), getMapEntryPartitionId(key), key], {prepare: true}, function (err, result) {
-        if (err)
-          callback(err)
-        else {
-          var key, etag, entrydata
-          if (result.rows.length > 0) {
-            var name = getMapId(result.rows[0].get('tid'), result.rows[0].get('a_scp'), result.rows[0].get('map'));
-            key = result.rows[0].get('key')
-            entrydata = {
-              name: name,
-              created: result.rows[0].get('c_at'),
-              createdBy: result.rows[0].get('c_by'),
-              updated: result.rows[0].get('u_at'),
-              updatedBy: result.rows[0].get('u_by')
-            }
-            etag = null
+function withValueDo(mapID, key, callback) {
+  getMapIDParts(mapID, function(err, ring, keyspace, tenantID, scope, name, version){
+    client.execute(selectValue(keyspace), [tenantID, scope, name, cassandra.types.Uuid.fromString(version), key], {prepare: true}, function (err, result) {
+      if (err)
+        callback(err)
+      else {
+        var value, valuedata, etag
+        if (result.rows.length > 0) {
+          var name = getMapID(ring, keyspace, result.rows[0].get('tid'), result.rows[0].get('a_scp'), result.rows[0].get('map'), result.rows[0].get('ver'));
+          value = result.rows[0].get('val')
+          valuedata = {
+            name: name,
+            created: result.rows[0].get('c_at'),
+            createdBy: result.rows[0].get('c_by'),
+            updated: result.rows[0].get('u_at'),
+            updatedBy: result.rows[0].get('u_by')
           }
-          callback(null, entrydata, etag)
+          etag = null
         }
-      })
-    }
+        callback(null, valuedata, value, etag)
+      }
+    })
   })
 }
 
 
-function withValueDo(mapId, key, callback) {
-  withMapDo(mapId, function (err, map, etag) {
-    if (err)
-      callback(err)
-    else if (map == null)
-      callback(404)
-    else{
-      let [ns, scope, name] = map.name.split(':')
-      client.execute(selectValue(config.databaseKeyspace), [ns, scope, name, cassandra.types.Uuid.fromString(map.version), key], {prepare: true}, function (err, result) {
-        if (err)
-          callback(err)
-        else {
-          var value, valuedata, etag
-          if (result.rows.length > 0) {
-            var name = getMapId(result.rows[0].get('tid'), result.rows[0].get('a_scp'), result.rows[0].get('map'));
-            value = result.rows[0].get('val')
-            valuedata = {
-              name: name,
-              created: result.rows[0].get('c_at'),
-              createdBy: result.rows[0].get('c_by'),
-              updated: result.rows[0].get('u_at'),
-              updatedBy: result.rows[0].get('u_by')
-            }
-            etag = null
-          }
-          callback(null, valuedata, value, etag)
-        }
-      })
-    }
+function removeMapEntry(mapID, key, callback) {
+  getMapIDParts(mapID, function(err, ring, keyspace, tenantID, scope, name, version){
+    client.execute(deleteMapEntry(keyspace), [tenantID, scope, name, cassandra.types.Uuid.fromString(version), getMapEntryPartitionId(key), key], {prepare: true}, function (err, result) {
+      if (err)
+        console.error('Error removing entry for mapid= ' + mapID + ', key=' + key)
+      else
+        callback(null, result)
+    })
   })
 }
 
 
-function removeMapEntry(mapId, key, callback) {
-  withMapDo(mapId, function (err, map, etag) {
-    if (err)
-      callback(err)
-    else if (map == null)
-      callback(404)
-    else{
-      let [ns, scope, name] = map.name.split(':')
-      client.execute(deleteMapEntry(config.databaseKeyspace), [ns, scope, name, cassandra.types.Uuid.fromString(map.version), getMapEntryPartitionId(key), key], {prepare: true}, function (err, result) {
-        if (err)
-          console.error('Error removing entry for mapid= ' + mapId + ', key=' + key)
-        else
-          callback(null, result)
-      })
-    }
+function removeMapValue(mapID, key, callback) {
+  getMapIDParts(mapID, function(err, ring, keyspace, tenantID, scope, name, version){
+    client.execute(deleteMapValue(keyspace), [tenantID, scope, name, cassandra.types.Uuid.fromString(version), key], {prepare: true}, function (err, result) {
+      if (err)
+        console.error('Error removing value for mapid= ' + mapID + ', key=' + key)
+      else
+        callback(null)
+    })
   })
 }
 
 
-function removeMapValue(mapId, key, callback) {
-  withMapDo(mapId, function (err, map, etag) {
-    if (err)
-      callback(err)
-    else if (map == null)
-      callback(404)
-    else{
-      let [ns, scope, name] = map.name.split(':')
-      client.execute(deleteMapValue(config.databaseKeyspace), [ns, scope, name, cassandra.types.Uuid.fromString(map.version), key], {prepare: true}, function (err, result) {
-        if (err)
-          console.error('Error removing value for mapid= ' + mapId + ', key=' + key)
-        else
-          callback(null)
-      })
-    }
-  })
-}
-
-
-function removeMapIndex(name, callback) {
-  client.execute(deleteMapIndex(config.databaseKeyspace), [name], {prepare: true}, function (err, result) {
-    if (err)
-      console.error('Error removing map index for name= ' + name)
-    else
-      callback(null)
-  })
-}
-
-function getMapId(ns, scope, name){
-  return ns+SEPARATOR+scope+SEPARATOR+name;
+function getMapID(ring, keyspace, tenantID, scope, name, version){
+  var id = ring + SEPARATOR + keyspace + SEPARATOR + tenantID
+  if( scope )
+    id += SEPARATOR + scope + SEPARATOR + name + SEPARATOR + version
+  else
+    id += SEPARATOR + name + SEPARATOR + version
+  return id
 }
 
 function getMapEntryPartitionId(key){
@@ -387,41 +387,41 @@ function getMapEntryPartitionId(key){
  * 1. Delete all entries and values for the given map
  * 2. Load map to obtain its version
  * 3. Delete the map
- * 4. Delete the map indexes
  */
-function deleteMapThen(mapId, callback) {
-  withMapDo(mapId, function (err, map, etag) {
+function deleteMapThen(mapID, callback) {
+  withMapDo(mapID, function (err, map, etag) {
     if (err)
       callback(err)
     else if (map == null)
       callback(404)
     else{
-      let [ns, scope, name] = map.name.split(':')
-      client.eachRow(selectEntries(config.databaseKeyspace), [ns, scope, name, cassandra.types.Uuid.fromString(map.version), 0], {prepare: true}, function (n, row) {
+      // todo just write entry into Perses table and bump map version?
+      getMapIDParts(mapID, function(err, ring, keyspace, tenantID, scope, name, version){
+        client.eachRow(selectEntries(keyspace), [tenantID, scope, name, cassandra.types.Uuid.fromString(version), 0], {prepare: true}, function (n, row) {
           //the callback will be invoked per each row as soon as they are received
-          removeMapEntry(getMapId(row.get('tid'), row.get('a_scp'), row.get('map')), row.get('key'), function (err, result) {})
-          removeMapValue(getMapId(row.get('tid'), row.get('a_scp'), row.get('map')), row.get('key'), function (err, result) {})
-      }, function (err) {
+          removeMapEntry(getMapID(ring, keyspace, row.get('tid'), row.get('a_scp'), row.get('map'), row.get('ver')), row.get('key'), function (err, result) {})
+          removeMapValue(getMapID(ring, keyspace, row.get('tid'), row.get('a_scp'), row.get('map'), row.get('ver')), row.get('key'), function (err, result) {})
+        }, function (err) {
           if (err)
-            callback(err)
+            callback(err, null, null)
           else {
-            client.execute(deleteMap(config.databaseKeyspace), [ns, scope, name], {prepare: true}, function (err, deleteResult) {
-              if (err)
-                console.error('Error removing map for mapid= ' + mapId)
+            client.execute(deleteMap(config.databaseKeyspace), [tenantID, scope, name], {prepare: true}, function (err, deleteResult) {
+              if (err) {
+                console.error('Error removing map for mapid= ' + mapID)
+                callback(err, null, null)
+              }
               else {
-                // remove any indexes
-                removeMapIndex(mapId, function (err, result) {})
-                removeMapIndex(map.name, function (err, result) {})
                 callback(null, map, null)
-
               }
             })
           }
         })
+      })
     }
   })
 }
 
+// Start - Source of function: http://werxltd.com/wp/2010/05/13/javascript-implementation-of-javas-string-hashcode-method/
 function javaStringHashCode(string){
   string = string.toString()
   var hash = 0, i, chr, len;
@@ -433,12 +433,13 @@ function javaStringHashCode(string){
   }
   return hash;
 }
+// End - Source of function: http://werxltd.com/wp/2010/05/13/javascript-implementation-of-javas-string-hashcode-method/
+
 
 function init(callback) {
 
   var keyspace = "CREATE KEYSPACE IF NOT EXISTS " + config.databaseKeyspace + " WITH replication = {'class': 'NetworkTopologyStrategy', " + config.databaseReplication + "}  AND durable_writes = true"
   var maps = "CREATE TABLE IF NOT EXISTS " + config.databaseKeyspace + ".kvm_map_descriptor ( tid text, a_scp text, map text, attr map < text, text >, c_at timestamp, c_by text, u_at timestamp, u_by text, ver timeuuid, PRIMARY KEY ((tid, a_scp), map)) WITH CLUSTERING ORDER BY (map ASC)"
-  var names = "CREATE TABLE IF NOT EXISTS " + config.databaseKeyspace + ".indexes ( name text, mapid text, PRIMARY KEY ((name), mapid))"
   var entries = "CREATE TABLE IF NOT EXISTS " + config.databaseKeyspace + ".kvm_map_keys_descriptor ( tid text, a_scp text, map text, ver timeuuid, part_id int, key text, c_at timestamp, c_by text, u_at timestamp, u_by text, PRIMARY KEY ((tid, a_scp, map, ver, part_id), key)) WITH CLUSTERING ORDER BY (key ASC)"
   var values = "CREATE TABLE IF NOT EXISTS " + config.databaseKeyspace + ".kvm_map_entry ( tid text, a_scp text, map text, ver timeuuid, key text, c_at timestamp, c_by text, u_at timestamp, u_by text, val text, PRIMARY KEY ((tid, a_scp, map, ver, key)))"
 
@@ -450,22 +451,16 @@ function init(callback) {
         if (err)
           callback(err)
         else {
-          client.execute(names, {}, function (err, result) {
+          client.execute(entries, {}, function (err, result) {
             if (err)
               callback(err)
             else {
-              client.execute(entries, {}, function (err, result) {
+              client.execute(values, {}, function (err, result) {
                 if (err)
                   callback(err)
                 else {
-                  client.execute(values, {}, function (err, result) {
-                    if (err)
-                      callback(err)
-                    else {
-                      console.log('Schema init success')
-                      callback(null, {}) // creates do not generate result rows
-                    }
-                  })
+                  console.log('Schema init success')
+                  callback(null, {}) // creates do not generate result rows
                 }
               })
             }
@@ -506,19 +501,36 @@ function getCassandraCL(stringConsistencyLevel) {
   }
 }
 
+function getTenantAndKeyspace(orgName, callback){
+  // todo what to actually send for host here because sendInternalRequest requires it
+  lib.sendInternalRequest({host:process.env.INTERNAL_SY_ROUTER_HOST}, '/orgs;'+orgName, 'GET', null, {}, function(err, clientRes) {
+    if (clientRes.statusCode !== 200)
+      callback('unable to obtain tenantID and keyspace')
+    else {
+      var body = ''
+      clientRes.on('data', function (d) {body += d})
+      clientRes.on('end', function () {
+        var org = JSON.parse(body)
+        callback(null, org.kvmRing, org.kvmKeyspace, org.tenantID)
+      })
+    }
+  })
+}
+
+// same as PG exported
 exports.createMapThen = createMapThen
 exports.updateMapThen = updateMapThen
-exports.createEntryThen = createEntryThen
-exports.createMapValue = createMapValue
-exports.upsertValueThen = upsertValueThen
+exports.deleteMapThen = deleteMapThen
 exports.withMapDo = withMapDo
-exports.withMapByNameDo = withMapByNameDo
-exports.getMapId = getMapId
+exports.createEntryThen = createEntryThen
+exports.upsertValueThen = upsertValueThen
 exports.withEntriesDo = withEntriesDo
 exports.withEntryDo = withEntryDo
+exports.withMapFromNameDo = withMapFromNameDo
 exports.withValueDo = withValueDo
+exports.makeMapID = makeMapID
+exports.init = init
+
+// some extra stuff exported
 exports.removeMapEntry = removeMapEntry
 exports.removeMapValue = removeMapValue
-exports.removeMapIndex = removeMapIndex
-exports.deleteMapThen = deleteMapThen
-exports.init = init
