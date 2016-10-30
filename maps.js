@@ -104,7 +104,7 @@ function verifyEntry(req, entry, user) {
 }
 
 function makeEntryURL(req, mapID, key) {
-  return `//${req.headers.host}${ENTRIES}${mapID}:${key}`
+  return `scheme://authority${ENTRIES}${mapID}:${key}`
 }
 
 function makeValueURL(req, mapID, key) {
