@@ -32,7 +32,7 @@ function uuid() {
 }
 // End of section of code adapted from https://github.com/broofa/node-uuid4 under MIT License
 
-function makeMapID(map, callback) {
+function makeMapID(orgID, map, callback) {
   callback(null, uuid())
 }
 

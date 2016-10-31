@@ -13,8 +13,8 @@ function withErrorHandling(req, res, callback) {
   }
 }
 
-function makeMapID(req, res, map, callback) {
-  db.makeMapID(map, withErrorHandling(req, res, callback))   
+function makeMapID(req, res, orgID, map, callback) {
+  db.makeMapID(orgID, map, withErrorHandling(req, res, callback))   
 }
 
 function createMapThen(req, res, mapID, selfURL, map, callback) {

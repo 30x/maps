@@ -76,7 +76,7 @@ function createMap(req, res, orgID, map) {
         var permissions = map.permissions
         if (permissions !== undefined)
           delete map.permissions
-        ps.makeMapID(req, res, map, function(mapID) {
+        ps.makeMapID(req, res, orgID, map, function(mapID) {
           var selfURL = makeMapURL(req, mapID)
           pLib.createPermissionsThen(req, res, selfURL, permissions, function(permissionsURL, permissions){
             // Create permissions first. If we fail after creating the permissions resource but before creating the main resource, 
@@ -310,7 +310,7 @@ function resolveOrgThenForward(req, res, orgName, remainder, buffer) {
     if (buffer)
       sendInternal(url, buffer)
     else
-      lib.getServerPostBuffer(req, res, function(buffer) {
+      lib.getServerPostBuffer(req, function(buffer) {
         sendInternal(url, buffer)
       })
   })
@@ -343,7 +343,7 @@ function requestHandler(req, res) {
     if (req.method == 'GET') 
       getEntry(req, res, mapID, key)
     else if (req.method == 'PATCH')
-      lib.getServerPostBuffer(req, res, function(value) {
+      lib.getServerPostBuffer(req, function(value) {
         updateEntry(req, res, mapID, key, value) 
       })
     else if (req.method == 'DELETE') 
@@ -355,7 +355,7 @@ function requestHandler(req, res) {
     if (req.method == 'GET') 
       getValue(req, res, mapID, key)
     else if (req.method == 'PUT')
-      lib.getServerPostBuffer(req, res, function(value) {
+      lib.getServerPostBuffer(req, function(value) {
         upsertValue(req, res, mapID, key, value) 
       })
     else if (req.method == 'DELETE') 
@@ -377,7 +377,7 @@ function requestHandler(req, res) {
   }
   if (req.url == '/maps') {
     if (req.method == 'POST')
-      lib.getServerPostBuffer(req, res, function(buffer) {
+      lib.getServerPostBuffer(req, function(buffer) {
         var map = JSON.parse(buffer)
         verifyMapOrg(req, res, map, function(orgName) {
           resolveOrgThenForward(req, res, orgName, '', buffer)
