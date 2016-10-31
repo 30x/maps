@@ -36,7 +36,6 @@ const client = new cassandra.Client({
 
 })
 
-const lib = require('http-helper-functions')
 const SEPARATOR = ':'
 
 
@@ -79,22 +78,23 @@ function uuid() {
 }
 // End of section of code adapted from https://github.com/broofa/node-uuid4 under MIT License
 
-function makeMapID(map, callback) {
-  if( map.org && map.name){
-    //console.log('makeMapID org: '+map.org)
-    var orgParts = map.org.split("/")
-    map.org = orgParts[orgParts.length -1] // for some reason this has scheme and authority on the org name for permissions
-    getTenantAndKeyspace(map.org, function(err, ring, keyspace, tenantID){
-      if(err)
-        callback(`Failed to make mapID from org and name. Unable to get keyspace and tenant for org: `+map.org)
-      else{
-        let parts = map.name.split(':')
-        let scope = parts.slice(0, -1).join(':')
-        let name = parts[parts.length - 1]
-        let version = cassandra.types.TimeUuid.now().toString()
-        callback(null, getMapID(ring, keyspace, tenantID, scope, name, version))
-      }
-    })
+function makeMapID(orgID, map, callback) {
+  if(orgID) {
+    var orgParts = orgID.split(":")
+    if (orgParts.length < 3)
+      callback(`orgID must be at least 3 parts {kvmRing}:{kvmKeyspace}:{tenantID}`)
+    else {
+      // get the org ID parts
+      let kvmRing = orgParts[0]
+      let kvmKeyspace = orgParts[1]
+      let tenantID = orgParts[2]
+      // get the map name parts
+      var mapParts = map.name.split(':')
+      let scope = mapParts.slice(0, -1).join(':')
+      let name = mapParts[mapParts.length - 1]
+      let version = cassandra.types.TimeUuid.now().toString()
+      callback(null, getMapID(kvmRing, kvmKeyspace, tenantID, scope, name, version))
+    }
   }
   else
     callback(null, uuid())
@@ -175,15 +175,23 @@ function createMapValue(mapID, key, valuedata, value, callback) {
 
 function getMapIDParts(mapID, callback){
   var parts = mapID.split(':')
-  if(parts < 2 )
+  if(parts.length < 2 )
     callback(400)
   else {
     let ring = parts[0]
     let keyspace = parts[1]
     let tenantID = parts[2]
     let scope = parts.slice(3, -2).join(':')
-    let name = parts[parts.length - 2]
-    let version = parts[parts.length - 1]
+    // version is not always in the mapID, and that's fine, just handle the parsing accordingly
+    let name = null
+    let version = null
+    if(parts.length == 4){
+      name = parts[parts.length - 1]
+    }
+    if(parts.length == 5){
+      name = parts[parts.length - 2]
+      version = parts[parts.length - 1]
+    }
     callback(null, ring, keyspace, tenantID, scope, name, version)
   }
 }
@@ -225,32 +233,24 @@ function withMapDo(mapID, callback) {
   })
 }
 
-function withMapFromNameDo(compoundName, callback) {
-  var parts = compoundName.split(':')
-  if (parts.length < 2)
-    callback(400)
-  else {
-    let org = parts[0]
-    let scope = parts.slice(1, -1).join(':')
-    let name = parts[parts.length - 1]
-    //console.log('withMapFromNameDo org: '+org)
-    getTenantAndKeyspace(org, function(err, ring, keyspace, tenantID){
-      if(err)
-        callback(`Unable to load map from name. Failed to get keyspace and tenant for org: `+org)
-      else{
-        var mapID = getMapID(ring, keyspace, tenantID, scope, name, "version_not_used_when_looking_up_map")
-        withMapDo(mapID, function (err, map, etag) {
-          if (err)
-            callback(err)
-          else if (map == null)
-            callback(404)
-          else {
-            callback(null, map.id, map, etag)
-          }
-        })
-      }
-    })
-  }
+function withMapFromOrgIDAndMapNameDo(compoundName, callback) {
+  //console.log('withMapFromOrgIDAndMapNameDo inputID: '+compoundName)
+  getMapIDParts(compoundName, function(err, ring, keyspace, tenantID, scope, name, version){
+    if(err)
+      callback(`Unable to load map from name. Failed to parts from mapID: `+compoundName)
+    else{
+      var mapID = getMapID(ring, keyspace, tenantID, scope, name, "version_not_used_when_looking_up_map")
+      //console.log('withMapFromOrgIDAndMapNameDo mapID: '+mapID)
+      withMapDo(mapID, function (err, map, etag) {
+        if (err)
+          callback(err)
+        else if (map == null)
+          callback(404)
+        else
+          callback(null, map.id, map, etag)
+      })
+    }
+  })
 }
 
 function withEntriesDo(mapID, callback) {
@@ -501,21 +501,6 @@ function getCassandraCL(stringConsistencyLevel) {
   }
 }
 
-function getTenantAndKeyspace(orgName, callback){
-  // todo what to actually send for host here because sendInternalRequest requires it
-  lib.sendInternalRequest({host:process.env.INTERNAL_SY_ROUTER_HOST}, '/orgs;'+orgName, 'GET', null, {}, function(err, clientRes) {
-    if (clientRes.statusCode !== 200)
-      callback('unable to obtain tenantID and keyspace')
-    else {
-      var body = ''
-      clientRes.on('data', function (d) {body += d})
-      clientRes.on('end', function () {
-        var org = JSON.parse(body)
-        callback(null, org.kvmRing, org.kvmKeyspace, org.tenantID)
-      })
-    }
-  })
-}
 
 // same as PG exported
 exports.createMapThen = createMapThen
@@ -526,7 +511,7 @@ exports.createEntryThen = createEntryThen
 exports.upsertValueThen = upsertValueThen
 exports.withEntriesDo = withEntriesDo
 exports.withEntryDo = withEntryDo
-exports.withMapFromNameDo = withMapFromNameDo
+exports.withMapFromOrgIDAndMapNameDo = withMapFromOrgIDAndMapNameDo
 exports.withValueDo = withValueDo
 exports.makeMapID = makeMapID
 exports.init = init
