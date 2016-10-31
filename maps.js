@@ -5,9 +5,10 @@ const lib = require('http-helper-functions')
 const pLib = require('permissions-helper-functions')
 const ps = require('./maps-persistence.js')
 
-var MAPS    = '/bWFw-'
-var ENTRIES = '/ZW50-'
-var VALUES  = '/dmFs-'
+const MAPS    = '/bWFw-'
+const ENTRIES = '/ZW50-'
+const VALUES  = '/dmFs-'
+const MAPWIHORGID = '/bWFwd2lk-'
 
 function verifyMapUpdate(req, res, map, patchedMap, callback) {
   if (map.org != patchedMap.org)
@@ -19,25 +20,38 @@ function verifyMapUpdate(req, res, map, patchedMap, callback) {
   callback()
 }
 
-function verifyMap(req, map, user, callback) {
-  var rslt = lib.setStandardCreationProperties(req, map, user)
-  if (map.isA != 'Map')
-    return `invalid JSON: "isA" property not set to "Map" ${JSON.stringify(map)}`
+function verifyMapOrg(req, res, map, callback) {
+  console.log('verifyMapOrg')
   if (typeof map.org != 'string')
-    return `invalid JSON: "org" property not set or not a string: ${map.org}`
-  if (map.fullName)
-    return `may not set fullName of map directly. FullName is calculated from name and org`
-  if (typeof map.name != 'string')
-    return `map name must be a string: ${map.name}`
+    return lib.badRequest(res, `invalid JSON: "org" property not set or not a string: ${map.org}`)
   var parsedOrg = url.parse(map.org)
   if (!parsedOrg.pathname.startsWith('/v1/o/'))
-    return `org URL path must begin with /v1/o/ : ${map.org}`
+    return lib.badRequest(res, `org URL path must begin with /v1/o/ : ${map.org}`)
   var pathSplit = parsedOrg.pathname.split('/')
   if (pathSplit.length != 4)
-    return `org URL path must be of form  /v1/o/{orgname} : ${map.org}`
-  var orgName = pathSplit[pathSplit.length - 1]
-  map.fullName = `${orgName}:${map.name}`
-  return null
+    return lib.badRequest(res, `org URL path must be of form  /v1/o/{orgname} : ${map.org}`)
+  callback(pathSplit[pathSplit.length - 1])
+}
+
+function verifyMap(req, res, orgID, map, user, callback) {
+  var rslt = lib.setStandardCreationProperties(req, map, user)
+  if (map.isA != 'Map') 
+    return lib.badRequest(res, `invalid JSON: "isA" property not set to "Map" ${JSON.stringify(map)}`)
+  if (map.fullName)
+    return lib.badRequest(res, `may not set fullName of map directly. FullName is calculated from name and org`)
+  if (typeof map.name != 'string')
+    return lib.badRequest(res, `map name must be a string: ${map.name}`)
+  map.orgID = orgID
+  map.fullName = `${orgID}:${map.name}`
+  ps.db.withMapFromOrgIDAndMapNameDo(map.fullName, function (err) {
+    if (err != 404) 
+      if (err)
+        lib.badRequest(res, `unable to check for map name collision. err: ${err}`)
+      else
+        lib.duplicate(res, `duplicate map name ${map.name}`)
+    else // not already there       
+      callback()
+  })
 }
 
 function makeMapURL(req, mapID) {
@@ -51,45 +65,31 @@ function addCalculatedMapProperties(req, map, selfURL) {
   map._permissionsHeirs = `scheme://authority/permissions-heirs?${map.self}`
 }
 
-function createMap(req, res, map) {
-  function primCreateMap() {
-    pLib.ifAllowedThen(req, res, map.org, 'maps', 'create', function() {
-      lib.internalizeURLs(map, req.headers.host) 
-      var permissions = map.permissions
-      if (permissions !== undefined)
-        delete map.permissions
-      ps.makeMapID(req, res, map, function(mapID) {
-        var selfURL = makeMapURL(req, mapID)
-        pLib.createPermissionsThen(req, res, selfURL, permissions, function(permissionsURL, permissions){
-          // Create permissions first. If we fail after creating the permissions resource but before creating the main resource, 
-          // there will be a useless but harmless permissions document.
-          // If we do things the other way around, a map without matching permissions could cause problems.
-          ps.createMapThen(req, res, mapID, selfURL, map, function(etag) {
-            addCalculatedMapProperties(req, map, selfURL)
-            lib.created(req, res, map, map.self, etag)
-          })
-        })    
-      })
-    })
-  }
+function createMap(req, res, orgID, map) {
   var user = lib.getUser(req.headers.authorization)
   if (user == null)
     lib.unauthorized(req, res)
-  else { 
-    var err = verifyMap(req, map, user)
-    if (err !== null) 
-      lib.badRequest(res, err)
-    else
-      ps.db.withMapFromNameDo(map.fullName, function (err) {
-        if (err != 404) 
-          if (err)
-            lib.badRequest(res, `unable to check for map name collision. err: ${err}`)
-          else
-            lib.duplicate(res, `duplicate map name ${map.name}`)
-        else // not already there       
-          pLib.ifAllowedThen(req, res, map.org, 'maps', 'create', primCreateMap)
+  else
+    verifyMap(req, res, orgID, map, user, function () {
+      pLib.ifAllowedThen(req, res, map.org, 'maps', 'create', function() {
+        lib.internalizeURLs(map, req.headers.host) 
+        var permissions = map.permissions
+        if (permissions !== undefined)
+          delete map.permissions
+        ps.makeMapID(req, res, map, function(mapID) {
+          var selfURL = makeMapURL(req, mapID)
+          pLib.createPermissionsThen(req, res, selfURL, permissions, function(permissionsURL, permissions){
+            // Create permissions first. If we fail after creating the permissions resource but before creating the main resource, 
+            // there will be a useless but harmless permissions document.
+            // If we do things the other way around, a map without matching permissions could cause problems.
+            ps.createMapThen(req, res, mapID, selfURL, map, function(etag) {
+              addCalculatedMapProperties(req, map, selfURL)
+              lib.created(req, res, map, map.self, etag)
+            })
+          })    
+        })
       })
-  }
+    })
 }
 
 function verifyEntry(req, entry, user) {
@@ -282,6 +282,40 @@ function getIDParts(req, res, mapFullName, callback) {
     lib.badRequest(res, `ID must be composed of at least 2 parts separated by ":"s (${mapFullName})`)
 }
 
+function getOrgID(req, res, orgName, callback){
+  lib.sendInternalRequestThen(req, res, '/orgs;'+orgName, 'GET', null, {}, function(clientRes) {
+    lib.getClientResponseBody(clientRes, function(body) {
+      if (clientRes.statusCode !== 200)
+        lib.internalError(res, `unable to retrieve orgID. statusCode = ${clientRes.statusCode} url: /orgs;${orgName} body: ${body}`)
+      else {
+          var org = JSON.parse(body)
+          callback(`${org.kvmRing}:${org.kvmKeyspace}:${org.tenantID}`)
+      }
+    })
+  })
+}
+
+function resolveOrgThenForward(req, res, orgName, remainder, buffer) {
+  function sendInternal(url, body) {
+    lib.sendInternalRequestThen(req, res, url, req.method, body, req.headers, function (clientRes) {
+      lib.getClientResponseBuffer(clientRes, function(buffer) {
+        delete clientRes.headers.connection
+        delete clientRes.headers['content-length']
+        lib.respond(req, res, clientRes.statusCode, clientRes.headers, buffer)
+      })
+    })
+  }  
+  getOrgID(req, res, orgName, function(orgID) {
+    var url = `${MAPWIHORGID}${orgID}${remainder}` 
+    if (buffer)
+      sendInternal(url, buffer)
+    else
+      lib.getServerPostBuffer(req, res, function(req, res, buffer) {
+        sendInternal(url, buffer)
+      })
+  })
+}
+
 function requestHandler(req, res) {
   function handleEntriesMethods(mapID) {
     if (req.method == 'POST') 
@@ -330,42 +364,54 @@ function requestHandler(req, res) {
       lib.methodNotAllowed(req, res, ['GET', 'PUT', 'DELETE'])
   }
   function handleMapPaths(splitPath, mapID) {
-    if (splitPath.length == 2)
+    if (splitPath.length == 2) // url of form /MAPS-{mapID}
       handleMapMethods(mapID)
-    else if (splitPath.length == 3 && splitPath[2] == 'entries') /* url of form /maps;ns:name/entries */
+    else if (splitPath.length == 3 && splitPath[2] == 'entries') // url of form /MAPS-{mapID}/entries 
       handleEntriesMethods(mapID)
-    else if (splitPath.length == 3 && splitPath[2].lastIndexOf('entries;',0) > -1) /* url of form /maps;ns:name/entries;{key} */
+    else if (splitPath.length == 3 && splitPath[2].lastIndexOf('entries;',0) > -1) // url of form /MAPS-{mapID}/entries;{key} 
       handleEntryMethods(mapID, splitPath[2].substring('entries;'.length))
-    else if (splitPath.length == 4 && splitPath[2].lastIndexOf('entries;',0) > -1 && splitPath[3] == 'value') /* url of form /maps;ns:name/entries;{key}/value */
+    else if (splitPath.length == 4 && splitPath[2].lastIndexOf('entries;',0) > -1 && splitPath[3] == 'value') // url of form /MAPS-{mapID}/entries;{key}/value 
       handleValueMethods(mapID, splitPath[2].substring('entries;'.length))
     else
       lib.notFound(req, res)  
   }
   if (req.url == '/maps') {
     if (req.method == 'POST')
-      lib.getServerPostObject(req, res, createMap)
+      lib.getServerPostBuffer(req, res, function(req, res, buffer) {
+        var map = JSON.parse(buffer)
+        verifyMapOrg(req, res, map, function(orgName) {
+          resolveOrgThenForward(req, res, orgName, '', buffer)
+        })
+      })
     else
       lib.methodNotAllowed(req, res, ['POST'])
   }
   else {
     var req_url = url.parse(req.url);
-    if (req_url.pathname.lastIndexOf(MAPS, 0) > -1) { /* url of form /MAPS-xxxxxx */
+    if (req_url.pathname.startsWith(MAPS)) { // url of form /MAPS{map-id}...
       let splitPath = req_url.pathname.split('/')
       handleMapPaths(splitPath, splitPath[1].substring(MAPS.length-1))
-    } else if (req_url.pathname.lastIndexOf(ENTRIES, 0) > -1) { /* url of form /ENTRIES-mapID:{key} */
+    } else if (req_url.pathname.startsWith(ENTRIES)) { /* url of form /ENTRIES{map-id}:{key} */
       let splitPath = req_url.pathname.split('/')
       let entryID = splitPath[1].substring(ENTRIES.length-1)
       getIDParts(req, res, entryID, handleEntryMethods)
-    } else if (req_url.pathname.lastIndexOf(VALUES, 0) > -1) { /* url of form /VALUES-mapID:{key} */
+    } else if (req_url.pathname.startsWith(VALUES)) { /* url of form /VALUES{map-id}:{key} */
       let splitPath = req_url.pathname.split('/')
       let valueID = splitPath[1].substring(VALUES.length-1)
       getIDParts(req, res, valueID, handleValueMethods)
-    } else if (req_url.pathname.lastIndexOf('/mapFromName;', 0) > -1) { /* url of form /maps;ns:name?????? */
+    } else if (req_url.pathname.startsWith(MAPWIHORGID)) { /* url of form /MAPWIHORGID{org-id}:{map-name}... */
       let splitPath = req_url.pathname.split('/')
-      let name = splitPath[1].substring('mapFromName;'.length)
-      ps.withMapFromNameDo(req, res, name, function(mapID) { // todo align mapID returned from PG and CASS so we can use it
-        handleMapPaths(splitPath, mapID)
-      })
+      let orgIDAndMapName = splitPath[1].substring(MAPWIHORGID.length - 1)
+      if (req.method == 'POST')
+        lib.getServerPostObject(req, res, function(req, res, map) {createMap(req, res, orgIDAndMapName, map)})
+      else
+        ps.withMapFromOrgIDAndMapNameDo(req, res, orgIDAndMapName, function(mapID) {
+          handleMapPaths(splitPath, mapID)
+        })
+    } else if (req_url.pathname.startsWith('/maps;')) { /* url of form /maps;{org-name}:{map-name}... */
+      let splitPath = req_url.pathname.split('/')
+      let orgName = splitPath[1].substring('maps;'.length).split(':')[0]
+      resolveOrgThenForward(req, res, orgName, req_url.pathname.substring(`/maps;${orgName}`.length))
     } else
       lib.notFound(req, res)
   }

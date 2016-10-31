@@ -1,10 +1,6 @@
 'use strict';
-var lib = require('http-helper-functions')
-var db;
-if( process.env.DBMS === 'pg')
-  db = require('./maps-pg.js')
-else
-  db = require('./maps-cass-cps.js')
+const lib = require('http-helper-functions')
+const db = require(process.env.DBMS == 'pg' ? './maps-pg.js' : './maps-cass-cps.js')
 
 function withErrorHandling(req, res, callback) {
   return function (err) {
@@ -52,6 +48,10 @@ function withMapFromNameDo(req, res, name, callback) {
   db.withMapFromNameDo(name, withErrorHandling(req, res, callback));
 }
 
+function withMapFromOrgIDAndMapNameDo(req, res, name, callback) {
+  db.withMapFromOrgIDAndMapNameDo(name, withErrorHandling(req, res, callback));
+}
+
 function withEntriesDo(req, res, mapID, callback) {
   db.withEntriesDo(mapID, withErrorHandling(req, res, callback));
 }
@@ -78,7 +78,7 @@ exports.createEntryThen = createEntryThen
 exports.upsertValueThen = upsertValueThen
 exports.withEntriesDo = withEntriesDo
 exports.withEntryDo=withEntryDo
-exports.withMapFromNameDo = withMapFromNameDo
+exports.withMapFromOrgIDAndMapNameDo = withMapFromOrgIDAndMapNameDo
 exports.withValueDo = withValueDo
 exports.makeMapID = makeMapID
 exports.db=db

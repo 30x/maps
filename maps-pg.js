@@ -104,7 +104,7 @@ function withValueDo(mapID, key, callback) {
   })
 }
 
-function withMapFromNameDo(name, callback) {
+function withMapFromOrgIDAndMapNameDo(name, callback) {
   pool.query(`SELECT id, etag, data FROM maps WHERE data @> '{"fullName": "${name}"}'`, function (err, pg_res) {
     if (err) 
       callback(err)
@@ -220,7 +220,7 @@ exports.createEntryThen = createEntryThen
 exports.upsertValueThen = upsertValueThen
 exports.withEntriesDo = withEntriesDo
 exports.withEntryDo = withEntryDo
-exports.withMapFromNameDo = withMapFromNameDo
+exports.withMapFromOrgIDAndMapNameDo = withMapFromOrgIDAndMapNameDo
 exports.withValueDo = withValueDo
 exports.makeMapID = makeMapID
 exports.init = init
