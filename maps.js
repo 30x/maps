@@ -310,7 +310,7 @@ function resolveOrgThenForward(req, res, orgName, remainder, buffer) {
     if (buffer)
       sendInternal(url, buffer)
     else
-      lib.getServerPostBuffer(req, res, function(req, res, buffer) {
+      lib.getServerPostBuffer(req, res, function(buffer) {
         sendInternal(url, buffer)
       })
   })
@@ -343,7 +343,7 @@ function requestHandler(req, res) {
     if (req.method == 'GET') 
       getEntry(req, res, mapID, key)
     else if (req.method == 'PATCH')
-      lib.getServerPostBuffer(req, res, function(req, res, value) {
+      lib.getServerPostBuffer(req, res, function(value) {
         updateEntry(req, res, mapID, key, value) 
       })
     else if (req.method == 'DELETE') 
@@ -355,7 +355,7 @@ function requestHandler(req, res) {
     if (req.method == 'GET') 
       getValue(req, res, mapID, key)
     else if (req.method == 'PUT')
-      lib.getServerPostBuffer(req, res, function(req, res, value) {
+      lib.getServerPostBuffer(req, res, function(value) {
         upsertValue(req, res, mapID, key, value) 
       })
     else if (req.method == 'DELETE') 
@@ -377,7 +377,7 @@ function requestHandler(req, res) {
   }
   if (req.url == '/maps') {
     if (req.method == 'POST')
-      lib.getServerPostBuffer(req, res, function(req, res, buffer) {
+      lib.getServerPostBuffer(req, res, function(buffer) {
         var map = JSON.parse(buffer)
         verifyMapOrg(req, res, map, function(orgName) {
           resolveOrgThenForward(req, res, orgName, '', buffer)
