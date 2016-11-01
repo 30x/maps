@@ -403,11 +403,9 @@ function requestHandler(req, res) {
       let splitPath = req_url.pathname.split('/')
       let orgIDAndMapName = splitPath[1].substring(MAPWIHORGID.length - 1)
       if (req.method == 'POST')
-        lib.getServerPostObject(req, res, function(req, res, map) {createMap(req, res, orgIDAndMapName, map)})
+        lib.getServerPostObject(req, res, (req, res, map) => createMap(req, res, orgIDAndMapName, map))
       else
-        ps.withMapFromOrgIDAndMapNameDo(req, res, orgIDAndMapName, function(mapID) {
-          handleMapPaths(splitPath, mapID)
-        })
+        ps.withMapFromOrgIDAndMapNameDo(req, res, orgIDAndMapName, (mapID) => handleMapPaths(splitPath, mapID))
     } else if (req_url.pathname.startsWith('/maps;')) { /* url of form /maps;{org-name}:{map-name}... */
       let splitPath = req_url.pathname.split('/')
       let orgName = splitPath[1].substring('maps;'.length).split(':')[0]
