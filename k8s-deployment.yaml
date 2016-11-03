@@ -1,27 +1,27 @@
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: teams
+  name: maps
   labels:
-    name: teams
+    name: maps
   namespace: apigee
 spec:
   replicas: 1
   selector:
     matchLabels:
-      component: teams
+      component: maps
   template:
     metadata:
       labels:
-        component: teams
+        component: maps
         routable: "true"
       annotations:
         privateHosts: sso.k8s.local
-        privatePaths: 3000:/teams
+        privatePaths: 3000:/maps
     spec:
       containers:
-      - name: teams
-        image: teams
+      - name: maps
+        image: maps
         imagePullPolicy: IfNotPresent
         env:
           - name: PORT

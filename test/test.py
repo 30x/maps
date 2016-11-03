@@ -161,7 +161,7 @@ def main():
         print 'failed to retrieve entry %s %s %s' % (entry_url, r.status_code, r.text)
         return
 
-    # POST value for HumptyDumpty
+    # PUT value for HumptyDumpty
 
     headers = {'Content-Type': 'text/plain','Authorization': 'Bearer %s' % TOKEN1}
     r = requests.put(value_ref, headers=headers, data='Humpty Dumpty Sat on a wall')
