@@ -272,9 +272,7 @@ function getIDParts(req, res, mapFullName, callback) {
 function requestHandler(req, res) {
   function handleEntriesMethods(mapID) {
     if (req.method == 'POST') 
-      lib.getServerPostObject(req, res, function(req, res, entry) {
-        createEntry(req, res, mapID, entry)
-      })
+      lib.getServerPostObject(req, res, (entry) => createEntry(req, res, mapID, entry))
     else if (req.method == 'GET')
       getEntries(req, res, mapID)
     else
@@ -286,9 +284,7 @@ function requestHandler(req, res) {
     else if (req.method == 'DELETE')
       deleteMap(req, res, mapID);
     else if (req.method == 'PATCH') 
-      lib.getServerPostObject(req, res, function (req, res, jso) {
-        updateMap(req, res, mapID, jso)
-      })
+      lib.getServerPostObject(req, res, (jso) => updateMap(req, res, mapID, jso))
     else 
       lib.methodNotAllowed(req, res, ['GET', 'DELETE', 'PATCH'])    
   }
@@ -345,7 +341,7 @@ function requestHandler(req, res) {
     let splitPath = req_url.pathname.split('/')
     let orgIDAndMapName = splitPath[1].substring(MAPWIHORGID.length - 1)
     if (req.method == 'POST')
-      lib.getServerPostObject(req, res, (req, res, map) => createMap(req, res, orgIDAndMapName, map))
+      lib.getServerPostObject(req, res, (map) => createMap(req, res, orgIDAndMapName, map))
     else
       ps.withMapFromOrgIDAndMapNameDo(req, res, orgIDAndMapName, (mapID) => handleMapPaths(splitPath, mapID))
   } else
